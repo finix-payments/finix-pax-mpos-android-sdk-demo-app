@@ -8,75 +8,172 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.finix.mpos.models.EnvEnum
 import com.finix.mpos.models.MerchantData
+import com.finix.mpos.models.SplitTransfer
 import com.finix.mpos.models.TransactionResult
+import com.finix.mpos.models.TransactionType
 import com.finix.mpos.sdk.MPOSConnectionCallback
 import com.finix.mpos.sdk.MPOSEMVProcessingCallback
 import com.finix.mpos.sdk.MPOSFinix
 import com.finix.mpos.sdk.MPOSTransactionCallback
+import com.finix.mpossampleapplication.ConfigPrefs
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import javax.inject.Inject
 
-class TransactionsViewModel : ViewModel() {
-
+@HiltViewModel
+class TransactionsViewModel @Inject constructor(@ApplicationContext private val context: Context) : ViewModel() {
     private lateinit var mpos: MPOSFinix
-    private val _isLoading: MutableLiveData<Boolean> = MutableLiveData()
-    val isLoading: LiveData<Boolean>
-        get() = _isLoading
 
-    private val _isConnected: MutableLiveData<Boolean> = MutableLiveData()
-    val isConnected: LiveData<Boolean>
-        get() = _isConnected
+    private val _deviceName = MutableLiveData("")
+    val deviceName: LiveData<String?> = _deviceName
 
-    private val merchantData = MerchantData(
-        merchantId = "[MERCHANT_ID]", // Update tou tor merchant ID
-        mid = "[MID]", // Update to your mid
-        deviceId = "[DEVICE_ID]", // Update to you device ID
-        env = "qa", // Possible values are (qa, sandbox, production)
-        userId = "[USER_ID]", // Update to your user ID
-        password = "[PASSWORD]" //Update to your password
-    )
+    private val _isLoading = MutableLiveData(false)
+    val isLoading: LiveData<Boolean> = _isLoading
 
-    var logText by mutableStateOf("Log Output \n")
+    private val _transactionStatus = MutableLiveData("")
+    var transactionStatus: LiveData<String> = _transactionStatus
+
+    private val _isConnected = MutableLiveData(false)
+    val isConnected: LiveData<Boolean> = _isConnected
+
+    var logText by mutableStateOf("")
         private set
 
-    fun transact(amount: String, transaction: String) {
-        logText += "\nStart New Transaction\n\n"
-        _isLoading.postValue(true)
-        try {
+    private val _merchantData = MutableStateFlow<MerchantData>(
+        ConfigPrefs.loadConfigurations(context = context, ConfigPrefs.loadEnvironment(context))
+    )
+    val merchantData: StateFlow<MerchantData> = _merchantData.asStateFlow()
+
+    private val _splitMerchants = MutableStateFlow<List<SplitTransfer>>(
+        ConfigPrefs.loadSplitMerchants(context = context, env = merchantData.value.env)
+    )
+    var splitMerchants = _splitMerchants
+
+
+    private val _tags = MutableStateFlow<String>(
+        ConfigPrefs.loadTags(context, merchantData.value.env)
+    )
+    val tags: StateFlow<String> = _tags
+
+    fun saveTags(tags: String) {
+        _tags.value = tags
+        ConfigPrefs.saveTags(context, merchantData.value.env, tags)
+    }
+
+    fun initializeDevice(context: Context) {
+        mpos = MPOSFinix(context, merchantData.value)
+    }
+
+    fun saveMerchantData(updatedMerchantData: MerchantData) {
+        _merchantData.value = updatedMerchantData
+        ConfigPrefs.saveConfigurations(context, updatedMerchantData)
+    }
+
+    fun saveSplitData(updatedSplit: List<SplitTransfer>) {
+        _splitMerchants.value = updatedSplit
+        ConfigPrefs.saveSplitMerchants(context, merchantData.value.env, updatedSplit)
+    }
+
+    fun clearSplitData() {
+        _splitMerchants.value = emptyList<SplitTransfer>()
+        ConfigPrefs.clearSplitMerchants(context, merchantData.value.env)
+    }
+
+    fun transact(amount: String, transactionType: TransactionType) {
+        appendLog("\nStart New Transaction\n")
+        setLoading(true)
+
+        kotlin.runCatching {
+            val amountInCents = (amount.toDouble() * 100).toLong()
+
             mpos.startTransaction(
-                (amount.toDouble() * 100).toLong(),
-                transaction.lowercase(), //Possible values are sale, auth and refund
-                object : MPOSTransactionCallback {
-                    override fun onSuccess(result: TransactionResult?) {
-                        _isLoading.postValue(false)
-                        logText += "Transaction Success\n"
-                    }
-
-                    override fun onError(errorMessage: String) {
-                        _isLoading.postValue(false)
-                        logText += "Transaction Error -> $errorMessage\n"
-                    }
-
-                    override fun onProcessing(currentStepMessage: String) {
-                        logText += "Transaction Status -> $currentStepMessage\n"
-                    }
-
-                },
-                object : MPOSEMVProcessingCallback {
-                    override fun onError(errorMessage: String) {
-                        logText += "EMV Processing Error -> $errorMessage\n"
-                    }
-
-                    override fun onProcessing(currentStepMessage: String) {
-                        logText += "EMV Processing Status -> $currentStepMessage\n"
-                    }
-
-                }
+                amountInCents,
+                transactionType,
+                transactionCallback(),
+                emvCallback(),
+                _splitMerchants.value.ifEmpty { null },
+                getTagsMap(tags.value)
             )
-        } catch (e: Exception) {
-            _isLoading.postValue(false)
-            logText += "Transaction Error -> ${e.message}\n"
+        }.onFailure {
+            appendLog("Transaction Error -> ${it.message}\n")
+            setLoading(false)
+            showStatus(transactionType.toString()+ "Failed!")
+        }
+    }
+
+    fun connectToTheDevice(deviceName: String, deviceAddress: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            setLoading(true)
+            appendLog("\nStart Connection to Device\n")
+
+            if (mpos.isConnected()) {
+                appendLog("Device Already Connected\n")
+                _isConnected.postValue(true)
+                setLoading(false)
+                return@launch
+            }
+
+            runCatching {
+                mpos.connect(deviceName, deviceAddress, object : MPOSConnectionCallback {
+                    override fun onSuccess() {
+                        appendLog("Device Connected\n")
+                        _deviceName.value = deviceName
+                        _isConnected.postValue(true)
+                    }
+
+                    override fun onError(errorMessage: String) {
+                        appendLog("Device Connection Error: $errorMessage\n")
+                        _isConnected.postValue(false)
+                    }
+
+                    override fun onProcessing(currentStepMessage: String) {
+                        appendLog("Device Connecting: $currentStepMessage\n")
+                    }
+                })
+            }.onFailure {
+                appendLog("Device Failed to Connect: ${it.message}\n")
+                _isConnected.postValue(false)
+            }
+
+            setLoading(false)
+        }
+    }
+
+    fun resetFiles() {
+        viewModelScope.launch {
+            setLoading(true)
+            appendLog("Reset Files\n")
+            withContext(Dispatchers.IO) {
+                mpos.resetFilesToDevice()
+            }
+            appendLog("Reset Files Complete\n")
+            setLoading(false)
+        }
+    }
+
+    fun resetDevice() {
+        viewModelScope.launch {
+            setLoading(true)
+            appendLog("Reset Device\n")
+
+            withContext(Dispatchers.IO) {
+                mpos.resetDevice()
+            }
+
+            appendLog("Reset Device Complete\n")
+            setLoading(false)
+            _isConnected.postValue(false)
         }
     }
 
@@ -85,73 +182,107 @@ class TransactionsViewModel : ViewModel() {
         mpos.cancelTransaction()
     }
 
-    fun resetFiles() {
-        _isLoading.postValue(true)
-        logText += "Reset files \n"
-        mpos.resetFilesToDevice()
-        _isLoading.postValue(false)
-    }
-
-    fun resetDevice() {
-        _isLoading.postValue(true)
-        logText += "Reset Device \n"
-        mpos.resetDevice()
-        _isLoading.postValue(false)
-    }
-
-    fun initializeDevice(context: Context) {
-        mpos = MPOSFinix(context, merchantData)
-    }
-
-    fun connectToTheDevice(deviceName: String, deviceAddress: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            _isLoading.postValue(true)
-            logText += "\nStart Connection to Device\n\n"
-            try {
-                if (!mpos.isConnected()) {
-                    mpos.connect(
-                        deviceName,
-                        deviceAddress,
-                        object : MPOSConnectionCallback {
-                            override fun onSuccess() {
-                                logText += "Device Connected\n"
-                                _isConnected.postValue(true)
-                            }
-
-                            override fun onError(errorMessage: String) {
-                                logText += "Device Connection Error: $errorMessage\n"
-                                _isConnected.postValue(false)
-                            }
-
-                            override fun onProcessing(currentStepMessage: String) {
-                                logText += "Device Connecting: $currentStepMessage\n"
-                            }
-                        }
-                    )
-                } else {
-                    logText += "Device Already Connected\n"
-                    _isConnected.postValue(true)
-                }
-            } catch (e: Exception) {
-                _isConnected.postValue(false)
-                logText += "Device Failed to Connect ${e.message}\n"
-            }
-            _isLoading.postValue(false)
-        }
-    }
 
     fun clearLogs() {
         logText = ""
     }
 
     fun destroy() {
-        logText += if (mpos.isConnected()) {
-            mpos.finishTransaction()
-            mpos.disconnect()
-            _isConnected.postValue(false)
-            "Device Disconnected\n"
-        } else {
-            "Device Not Connected\n"
+        appendLog(
+            if (mpos.isConnected()) {
+                mpos.finishTransaction()
+                mpos.disconnect()
+                _isConnected.postValue(false)
+                "Device Disconnected\n"
+            } else {
+                "Device Not Connected\n"
+            }
+        )
+    }
+
+    private fun appendLog(message: String) {
+        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
+        logText += "[$timestamp] $message\n"
+    }
+
+    private fun setLoading(value: Boolean) {
+        _isLoading.postValue(value)
+    }
+
+    fun showStatus(stats: String) {
+        _transactionStatus.value = stats
+    }
+
+    fun endStatus() {
+        _transactionStatus.value = ""
+    }
+
+    private fun transactionCallback(): MPOSTransactionCallback = object : MPOSTransactionCallback {
+        override fun onSuccess(result: TransactionResult?) {
+            appendLog("Transaction Success\n")
+            setLoading(false)
+        }
+
+        override fun onError(errorMessage: String) {
+            appendLog("Transaction Error -> $errorMessage\n")
+            setLoading(false)
+        }
+
+        override fun onProcessing(currentStepMessage: String) {
+            appendLog("Transaction Status -> $currentStepMessage\n")
         }
     }
+
+    private fun emvCallback(): MPOSEMVProcessingCallback = object : MPOSEMVProcessingCallback {
+        override fun onError(errorMessage: String) {
+            appendLog("EMV Processing Error -> $errorMessage\n")
+        }
+
+        override fun onProcessing(currentStepMessage: String) {
+            appendLog("EMV Processing Status -> $currentStepMessage\n")
+        }
+    }
+
+    fun isValidSplitMerchants(merchants: List<SplitTransfer>): Boolean {
+        merchants.forEach {
+            if(it.merchantId.isEmpty() || it.amount<=0) {
+                return false
+            }
+        }
+        return true
+    }
+
+    fun getTagsMap(inputTag: String): Map<String, String>? {
+        return inputTag
+            .takeIf { it.isNotBlank() && isValidKeyValueFormat(it) }
+            ?.split(",")
+            ?.map { it.trim() }?.associate {
+                val (key, value) = it.split(":").map(String::trim)
+                key to value
+            }
+    }
+
+    fun isValidKeyValueFormat(input: String): Boolean {
+        return input.split(",").all {
+            it.contains(":") && it.split(":").size == 2
+        }
+    }
+}
+
+fun MerchantData.copyWith(
+    deviceId: String = this.deviceId,
+    merchantId: String = this.merchantId,
+    mid: String = this.mid,
+    userId: String = this.userId,
+    password: String = this.password,
+    env: EnvEnum = this.env
+): MerchantData {
+    return MerchantData(
+        deviceId = deviceId,
+        merchantId = merchantId,
+        mid = mid,
+        userId = userId,
+        password = password,
+        env = env
+    )
 }
