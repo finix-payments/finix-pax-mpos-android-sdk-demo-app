@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -78,6 +79,7 @@ fun MainViews(
     var menuExpanded by remember { mutableStateOf(false) }
     var showBottomSheet by remember { mutableStateOf(false) }
     var configurationSheet by remember { mutableStateOf(false) }
+    var showDisconnectDialog by remember { mutableStateOf(false) }
     var otherSheet by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf("3.14") }
     val cardColor = if(isSystemInDarkTheme()) Color.DarkGray else Color.LightGray
@@ -122,8 +124,29 @@ fun MainViews(
                     permissionsAccepted,
                     isConnected,
                     onScanClick = { showBottomSheet = true },
-                    onDisconnectClick = { viewModel.destroy() }
+                    onDisconnectClick = { showDisconnectDialog = true }
                 )
+
+                if (showDisconnectDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showDisconnectDialog = false },
+                        title = { Text("Disconnect Device?") },
+                        text = { Text("This device will be unpaired and you'll need to scan for it again to reconnect.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                viewModel.destroy()
+                                showDisconnectDialog = false
+                            }) {
+                                Text("Disconnect")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showDisconnectDialog = false }) {
+                                Text("Cancel")
+                            }
+                        }
+                    )
+                }
 
                 if(isConnected) {
                     Spacer(modifier = Modifier.height(18.dp))
