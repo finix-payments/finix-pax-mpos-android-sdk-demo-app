@@ -33,17 +33,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.finix.mpos.models.EnvEnum
 import com.finix.mpos.models.MerchantData
-import com.finix.mpossampleapplication.ConfigPrefs
 import com.finix.mpossampleapplication.R
 import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
 import com.finix.mpossampleapplication.ui.viewModels.copyWith
+import com.finix.mpossampleapplication.utils.ConfigValidator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("MissingPermission")
@@ -52,7 +51,6 @@ fun ConfigurationSheet(
     viewModel: TransactionsViewModel,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val environments = listOf(EnvEnum.PROD, EnvEnum.SB, EnvEnum.QA)
@@ -68,12 +66,15 @@ fun ConfigurationSheet(
     val merchantDataMap = remember {
         mutableStateMapOf<EnvEnum, MerchantData>().apply {
             environments.forEach { env ->
-                this[env] = ConfigPrefs.loadConfigurations(context, env)
+                this[env] = viewModel.loadConfigurations(env)
             }
         }
     }
 
     val currentEditedData = merchantDataMap[selectedEnvironment] ?: merchantData
+
+    var validationErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -106,10 +107,16 @@ fun ConfigurationSheet(
 
                 TextButton(
                     onClick = {
-                        merchantDataMap[selectedEnvironment]?.let {
-                            viewModel.saveMerchantData(it.copyWith(env = selectedEnvironment))
+                        merchantDataMap[selectedEnvironment]?.let { data ->
+                            val validation = ConfigValidator.validateMerchantConfig(data)
+
+                            if (validation.isValid) {
+                                viewModel.saveMerchantData(data.copyWith(env = selectedEnvironment))
+                                onDismiss()
+                            } else {
+                                validationErrors = validation.errors
+                            }
                         }
-                        onDismiss()
                     }
                 ) {
                     Text("Save")
@@ -142,7 +149,9 @@ fun ConfigurationSheet(
                 merchantData = currentEditedData,
                 onChange = { updated ->
                     merchantDataMap[selectedEnvironment] = updated
-                }
+                    validationErrors = emptyMap()
+                },
+                validationErrors = validationErrors
             )
 
             LaunchedEffect(Unit) {
@@ -158,7 +167,8 @@ fun ConfigurationSheet(
 @Composable
 fun MerchantDataForm(
     merchantData: MerchantData,
-    onChange: (MerchantData) -> Unit
+    onChange: (MerchantData) -> Unit,
+    validationErrors: Map<String, String> = emptyMap()
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -174,6 +184,10 @@ fun MerchantDataForm(
             value = merchantData.deviceId,
             onValueChange = { onChange(merchantData.copyWith(deviceId = it)) },
             label = { Text("ID") },
+            isError = validationErrors.containsKey("deviceId"),
+            supportingText = {
+                validationErrors["deviceId"]?.let { Text(it, color = Color.Red) }
+            },
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -183,12 +197,20 @@ fun MerchantDataForm(
             value = merchantData.merchantId,
             onValueChange = { onChange(merchantData.copyWith(merchantId = it)) },
             label = { Text("ID") },
+            isError = validationErrors.containsKey("merchantId"),
+            supportingText = {
+                validationErrors["merchantId"]?.let { Text(it, color = Color.Red) }
+            },
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
             value = merchantData.mid,
             onValueChange = { onChange(merchantData.copyWith(mid = it)) },
             label = { Text("MID") },
+            isError = validationErrors.containsKey("mid"),
+            supportingText = {
+                validationErrors["mid"]?.let { Text(it, color = Color.Red) }
+            },
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -198,6 +220,10 @@ fun MerchantDataForm(
             value = merchantData.userId,
             onValueChange = { onChange(merchantData.copyWith(userId = it)) },
             label = { Text("Username") },
+            isError = validationErrors.containsKey("userId"),
+            supportingText = {
+                validationErrors["userId"]?.let { Text(it, color = Color.Red) }
+            },
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
@@ -205,6 +231,10 @@ fun MerchantDataForm(
             onValueChange = { onChange(merchantData.copyWith(password = it)) },
             label = { Text("Password") },
             modifier = Modifier.fillMaxWidth(),
+            isError = validationErrors.containsKey("password"),
+            supportingText = {
+                validationErrors["password"]?.let { Text(it, color = Color.Red) }
+            },
             visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {

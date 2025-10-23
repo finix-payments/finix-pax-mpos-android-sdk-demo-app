@@ -1,24 +1,28 @@
-package com.finix.mpossampleapplication
+package com.finix.mpossampleapplication.utils
 
 import android.content.Context
+import androidx.core.content.edit
 import com.finix.mpos.models.EnvEnum
 import com.finix.mpos.models.MerchantData
+import com.finix.mpos.models.SplitTransfer
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import androidx.core.content.edit
-import com.finix.mpos.models.SplitTransfer
+import javax.inject.Inject
 
-object ConfigPrefs {
-    private const val PREF_NAME = "merchant_data"
-    private const val KEY_DEVICE_ID = "device_id"
-    private const val KEY_MERCHANT_ID = "merchant_id"
-    private const val KEY_MERCHANT_MID = "merchant_mid"
-    private const val KEY_API_USERNAME = "username"
-    private const val KEY_API_PASSWORD = "password"
-    private const val KEY_SPLIT_MERCHANTS = "split_merchants"
+class ConfigPrefs @Inject constructor() {
+    companion object {
+        private val PREF_NAME = "merchant_data"
+        private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_MERCHANT_ID = "merchant_id"
+        private const val KEY_MERCHANT_MID = "merchant_mid"
+        private const val KEY_API_USERNAME = "username"
+        private const val KEY_API_PASSWORD = "password"
+        private const val KEY_SPLIT_MERCHANTS = "split_merchants"
+        private const val KEY_ENVIRONMENT = "environment"
+        private const val KEY_TAGS = "tags"
 
-    private const val KEY_ENVIRONMENT = "environment"
-    private const val KEY_TAGS = "tags"
+        const val D135 = "D135"
+    }
 
     private fun key(key: String, env: EnvEnum) = "${key}_${env.name}"
 
@@ -85,7 +89,7 @@ object ConfigPrefs {
         return prefs.getString(key(KEY_TAGS, env), "") ?: ""
     }
 
-    fun loadEnvironment(context: Context): EnvEnum {
+    fun loadCurrentEnvironment(context: Context): EnvEnum {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         val envName = prefs.getString(KEY_ENVIRONMENT, null)
         return try {

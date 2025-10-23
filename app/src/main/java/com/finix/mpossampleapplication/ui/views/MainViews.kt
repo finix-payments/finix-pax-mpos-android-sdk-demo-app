@@ -62,11 +62,11 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.core.text.isDigitsOnly
 import com.finix.mpos.models.TransactionType
 import com.finix.mpossampleapplication.R
 import com.finix.mpossampleapplication.ui.theme.MPOSSampleApplicationTheme
 import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
+import com.finix.mpossampleapplication.utils.ConfigPrefs
 import kotlinx.coroutines.delay
 
 
@@ -538,6 +538,6 @@ fun LogSection(
 @Composable
 fun HomeViewsPreview() {
     MPOSSampleApplicationTheme {
-        MainViews(TransactionsViewModel(context = LocalContext.current), true, true)
+        MainViews(TransactionsViewModel(context = LocalContext.current, ConfigPrefs()), true, true)
     }
 }
