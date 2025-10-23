@@ -29,7 +29,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,11 +37,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.finix.mpos.models.SplitTransfer
 import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
+import com.finix.mpossampleapplication.ui.viewModels.copyWith
+import com.finix.mpossampleapplication.utils.ConfigValidator
+import com.finix.mpossampleapplication.utils.SplitTransferValidator
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +64,10 @@ fun OtherSheet(
     val observedSplits by viewModel.splitMerchants.collectAsState()
     val splitMerchants = remember { mutableStateListOf<SplitTransfer>() }
     var isSplitChecked by remember { mutableStateOf(false) }
+
+
+    var splitValidationErrors by remember { mutableStateOf<Map<Int, Map<String,String>>>(emptyMap()) }
+
 
     LaunchedEffect(observedTags, observedSplits) {
         if (!hasInitialized) {
@@ -112,13 +119,30 @@ fun OtherSheet(
 
                 TextButton(
                     onClick = {
-                        if (isSplitChecked && splitMerchants.isNotEmpty()) {
-                            viewModel.saveSplitData(splitMerchants)
+                        var hasErrors = false
+
+                        viewModel.saveTags(tags)
+
+                        if (isSplitChecked) {
+                            val allErrors = mutableMapOf<Int, Map<String, String>>()
+                            splitMerchants.forEachIndexed { index, row ->
+                                val validation = SplitTransferValidator.validateMerchantConfig(row)
+                                if (!validation.isValid) {
+                                    allErrors[index] = validation.errors
+                                    hasErrors = true
+                                }
+                            }
+
+                            if (!hasErrors) {
+                                viewModel.saveSplitData(splitMerchants)
+                                onDismiss()
+                            } else {
+                                splitValidationErrors = allErrors
+                            }
                         } else {
                             viewModel.clearSplitData()
+                            onDismiss()
                         }
-                        viewModel.saveTags(tags)
-                        onDismiss()
                     }
                 ) {
                     Text("Save")
@@ -161,7 +185,7 @@ fun OtherSheet(
 
             if (isSplitChecked) {
                 splitMerchants.forEachIndexed { index, row ->
-                    SplitRow(
+                    SplitMerchantRow(
                         index = index,
                         merchantData = row,
                         isLastItem = index == splitMerchants.lastIndex,
@@ -174,6 +198,7 @@ fun OtherSheet(
                         },
                         onChange = { i, updatedRow ->
                             splitMerchants[i] = updatedRow
+                            splitValidationErrors = splitValidationErrors - i // Clear only this row's errors
                         },
                         onDelete = { i ->
                             if(splitMerchants.size == 1) {
@@ -182,7 +207,8 @@ fun OtherSheet(
                             } else if (splitMerchants.size > 1) {
                                 splitMerchants.removeAt(i)
                             }
-                        }
+                        },
+                        validationErrors = splitValidationErrors[index] ?: emptyMap()
                     )
                 }
             }
@@ -191,24 +217,33 @@ fun OtherSheet(
 }
 
 @Composable
-fun SplitRow(
+fun SplitMerchantRow(
     index: Int,
     merchantData: SplitTransfer,
     isLastItem: Boolean,
     onAddClick: () -> Unit,
     onChange: (Int, SplitTransfer) -> Unit,
-    onDelete: (Int) -> Unit
+    onDelete: (Int) -> Unit,
+    validationErrors: Map<String, String> = emptyMap()
 ) {
+    var tagsInput by rememberSaveable { mutableStateOf(
+        merchantData.tags.orEmpty().entries.joinToString(", ") { "${it.key}: ${it.value}" }
+    ) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 25.dp)
+            .padding(bottom = 20.dp)
     ) {
         OutlinedTextField(
             value = merchantData.merchantId,
             onValueChange = { onChange(index, merchantData.copy(merchantId = it)) },
             label = { Text("Merchant ID") },
             enabled = index > 0,
+            isError = validationErrors.containsKey("merchantId") ,
+            supportingText = {
+                validationErrors["merchantId"]?.let { Text(it, color = Color.Red) }
+            },
             modifier = Modifier.fillMaxWidth()
         )
         Row(
@@ -216,54 +251,48 @@ fun SplitRow(
         ) {
 
             AmountInputField(
+                modifier = Modifier.weight(1f),
                 label = "Amount",
                 valueInCents = merchantData.amount,
                 onValueChangeInCents = { newAmount ->
                     onChange(index, merchantData.copy(amount = newAmount ?: 0L))
                 },
-                modifier = Modifier.weight(1f).padding(top = 5.dp)
+                validationErrors = validationErrors
             )
 
             AmountInputField(
+                modifier = Modifier.weight(1f),
                 label = "Fee",
                 valueInCents = merchantData.fee,
                 onValueChangeInCents = { newFee ->
                     onChange(index, merchantData.copy(fee = newFee))
                 },
-                modifier = Modifier.weight(1f).padding(top = 5.dp)
+                validationErrors = validationErrors
             )
         }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-
-            val tagsAsString = merchantData.tags.orEmpty()
-                .entries.joinToString(", ") { "${it.key}: ${it.value}" }
-
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             OutlinedTextField(
-                value = tagsAsString,
-                onValueChange =
-                    {
-                        // Convert string back to map
-                        val map = it.split(",")
-                            .mapNotNull { entry ->
-                                val parts = entry.split(":").map { it.trim() }
-                                if (parts.size == 2 && parts[0].isNotEmpty()) {
-                                    parts[0] to parts[1]
-                                } else null
-                            }
-                            .toMap()
-
-                        onChange(index, merchantData.copy(tags = map))
-                    },
+                value = tagsInput,
+                onValueChange = { input ->
+                    tagsInput = input
+                    val map = input.split(",")
+                        .mapNotNull { entry ->
+                            val parts = entry.split(":").map { it.trim() }
+                            if (parts.size == 2 && parts[0].isNotEmpty()) parts[0] to parts[1] else null
+                        }.toMap()
+                    onChange(index, merchantData.copy(tags = map))
+                },
                 label = { Text("Tags") },
-                placeholder = { Text("Key: Value") },
-                modifier = Modifier.weight(1f),
+                placeholder = { Text("key: value") },
+                isError = validationErrors.containsKey("tags"),
+                supportingText = {
+                    validationErrors["tags"]?.let { Text(it, color = Color.Red) }
+                },
+                modifier = Modifier.weight(1f)
             )
 
-            if(index >0) {
+            if (index > 0) {
                 IconButton(
                     onClick = { onDelete(index) },
                     modifier = Modifier.padding(start = 8.dp)
@@ -284,10 +313,11 @@ fun SplitRow(
 
 @Composable
 fun AmountInputField(
+    modifier: Modifier = Modifier,
     label: String,
     valueInCents: Long?,
     onValueChangeInCents: (Long?) -> Unit,
-    modifier: Modifier = Modifier
+    validationErrors: Map<String, String> = emptyMap()
 ) {
     var amountInput by rememberSaveable { mutableStateOf("") }
 
@@ -317,6 +347,10 @@ fun AmountInputField(
         keyboardOptions = KeyboardOptions.Default.copy(
             keyboardType = KeyboardType.Decimal
         ),
+        isError = validationErrors.containsKey(label.lowercase()) ,
+        supportingText = {
+            validationErrors[label.lowercase()]?.let { Text(it, color = Color.Red) }
+        },
         modifier = modifier
     )
 }

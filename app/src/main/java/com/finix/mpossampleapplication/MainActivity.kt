@@ -12,16 +12,23 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.finix.mpossampleapplication.ui.theme.MPOSSampleApplicationTheme
 import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
 import com.finix.mpossampleapplication.ui.views.MainViews
 import com.finix.mpossampleapplication.ui.views.Progress
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 
 @AndroidEntryPoint
@@ -29,14 +36,22 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: TransactionsViewModel by viewModels()
 
-    private val _permissionsGranted: MutableLiveData<Boolean> = MutableLiveData(false)
-    private val permissionsGranted: LiveData<Boolean>
-        get() = _permissionsGranted
+    private val _permissionsGranted = MutableStateFlow(false)
+    private val permissionsGranted = _permissionsGranted.asStateFlow()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestBluetoothPermissions()
-        viewModel.initializeDevice(this)
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                _permissionsGranted.collect { granted ->
+                    if (granted) {
+                        viewModel.initializeDevice(this@MainActivity)
+                    }
+                }
+            }
+        }
 
         setContent {
             MPOSSampleApplicationTheme {
@@ -45,7 +60,7 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val isLoading by viewModel.isLoading.observeAsState(false)
-                    val permissionsAccepted by permissionsGranted.observeAsState(false)
+                    val permissionsAccepted by permissionsGranted.collectAsState()
                     val isConnected by viewModel.isConnected.observeAsState(false)
 
                     MainViews(viewModel = viewModel, permissionsAccepted ?: true, isConnected)

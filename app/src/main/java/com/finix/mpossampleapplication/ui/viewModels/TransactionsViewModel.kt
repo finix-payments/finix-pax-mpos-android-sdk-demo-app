@@ -17,7 +17,7 @@ import com.finix.mpos.sdk.MPOSConnectionCallback
 import com.finix.mpos.sdk.MPOSEMVProcessingCallback
 import com.finix.mpos.sdk.MPOSFinix
 import com.finix.mpos.sdk.MPOSTransactionCallback
-import com.finix.mpossampleapplication.ConfigPrefs
+import com.finix.mpossampleapplication.utils.ConfigPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -32,7 +32,10 @@ import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
-class TransactionsViewModel @Inject constructor(@ApplicationContext private val context: Context) : ViewModel() {
+class TransactionsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val configPrefs: ConfigPrefs
+) : ViewModel() {
     private lateinit var mpos: MPOSFinix
 
     private val _deviceName = MutableLiveData("")
@@ -51,24 +54,24 @@ class TransactionsViewModel @Inject constructor(@ApplicationContext private val 
         private set
 
     private val _merchantData = MutableStateFlow<MerchantData>(
-        ConfigPrefs.loadConfigurations(context = context, ConfigPrefs.loadEnvironment(context))
+        loadConfigurations(configPrefs.loadCurrentEnvironment(context))
     )
     val merchantData: StateFlow<MerchantData> = _merchantData.asStateFlow()
 
     private val _splitMerchants = MutableStateFlow<List<SplitTransfer>>(
-        ConfigPrefs.loadSplitMerchants(context = context, env = merchantData.value.env)
+        configPrefs.loadSplitMerchants(context = context, env = merchantData.value.env)
     )
     var splitMerchants = _splitMerchants
 
 
     private val _tags = MutableStateFlow<String>(
-        ConfigPrefs.loadTags(context, merchantData.value.env)
+        configPrefs.loadTags(context, merchantData.value.env)
     )
     val tags: StateFlow<String> = _tags
 
     fun saveTags(tags: String) {
         _tags.value = tags
-        ConfigPrefs.saveTags(context, merchantData.value.env, tags)
+        configPrefs.saveTags(context, merchantData.value.env, tags)
     }
 
     fun initializeDevice(context: Context) {
@@ -77,22 +80,23 @@ class TransactionsViewModel @Inject constructor(@ApplicationContext private val 
 
     fun saveMerchantData(updatedMerchantData: MerchantData) {
         _merchantData.value = updatedMerchantData
-        ConfigPrefs.saveConfigurations(context, updatedMerchantData)
+        configPrefs.saveConfigurations(context, updatedMerchantData)
     }
 
     fun saveSplitData(updatedSplit: List<SplitTransfer>) {
         _splitMerchants.value = updatedSplit
-        ConfigPrefs.saveSplitMerchants(context, merchantData.value.env, updatedSplit)
+        configPrefs.saveSplitMerchants(context, merchantData.value.env, updatedSplit)
     }
 
     fun clearSplitData() {
         _splitMerchants.value = emptyList<SplitTransfer>()
-        ConfigPrefs.clearSplitMerchants(context, merchantData.value.env)
+        configPrefs.clearSplitMerchants(context, merchantData.value.env)
     }
 
     fun transact(amount: String, transactionType: TransactionType) {
         appendLog("\nStart New Transaction\n")
         setLoading(true)
+
 
         kotlin.runCatching {
             val amountInCents = (amount.toDouble() * 100).toLong()
@@ -243,6 +247,10 @@ class TransactionsViewModel @Inject constructor(@ApplicationContext private val 
         }
     }
 
+    fun loadConfigurations(env: EnvEnum): MerchantData {
+        return configPrefs.loadConfigurations(context = context, env)
+    }
+
     fun isValidSplitMerchants(merchants: List<SplitTransfer>): Boolean {
         merchants.forEach {
             if(it.merchantId.isEmpty() || it.amount<=0) {
@@ -266,6 +274,12 @@ class TransactionsViewModel @Inject constructor(@ApplicationContext private val 
         return input.split(",").all {
             it.contains(":") && it.split(":").size == 2
         }
+    }
+}
+
+fun isValidKeyValueFormat(input: String): Boolean {
+    return input.split(",").all {
+        it.contains(":") && it.split(":").size == 2
     }
 }
 

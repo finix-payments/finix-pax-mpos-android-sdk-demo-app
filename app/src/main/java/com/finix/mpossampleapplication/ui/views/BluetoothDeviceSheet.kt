@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.finix.mpossampleapplication.utils.ConfigPrefs.Companion.D135
 import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,6 +51,7 @@ fun BluetoothDeviceSheet(
         val pairedDevices: Set<BluetoothDevice>? = bluetoothAdapter?.bondedDevices
         val devices by remember { mutableStateOf(pairedDevices?.toList() ?: emptyList()) }
 
+
         Text(
             "COMPATIBLE DEVICES",
             color = Color.Gray,
@@ -59,7 +61,7 @@ fun BluetoothDeviceSheet(
             modifier = Modifier
                 .fillMaxWidth()
         ) {
-            items(devices.filter { it.name.startsWith("D135") }) { device ->
+            items(devices.filter { it.name.startsWith(D135) }) { device ->
                 BluetoothDeviceItem(device.name, device.address) {
                     viewModel.connectToTheDevice(device.name, device.address)
                     onDismiss.invoke()
