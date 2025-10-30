@@ -68,6 +68,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.runtime:runtime-livedata")
     implementation ("com.google.dagger:hilt-android:2.51")
+    implementation("androidx.appcompat:appcompat:1.7.1")
+    implementation("androidx.compose.foundation:foundation:1.9.4")
     kapt ("com.google.dagger:hilt-compiler:2.51")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
@@ -77,6 +79,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    implementation("com.finix:pax-mpos-sdk-android:3.1.1")
+    implementation("com.finix:pax-mpos-sdk-android:3.2.5-SNAPSHOT")
 
 }

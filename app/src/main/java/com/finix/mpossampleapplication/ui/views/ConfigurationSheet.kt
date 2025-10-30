@@ -53,11 +53,10 @@ fun ConfigurationSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val environments = listOf(EnvEnum.PROD, EnvEnum.SB, EnvEnum.QA)
+    val environments = listOf(EnvEnum.PROD, EnvEnum.SB)
     val envDisplayNames = mapOf(
         EnvEnum.PROD to "Production",
-        EnvEnum.SB to "Sandbox",
-        EnvEnum.QA to "QA"
+        EnvEnum.SB to "Sandbox"
     )
 
     val merchantData by viewModel.merchantData.collectAsState()

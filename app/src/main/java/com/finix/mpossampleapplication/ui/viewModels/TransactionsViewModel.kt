@@ -9,6 +9,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.finix.mpos.models.EnvEnum
+import com.finix.mpos.models.LogsResponse
 import com.finix.mpos.models.MerchantData
 import com.finix.mpos.models.SplitTransfer
 import com.finix.mpos.models.TransactionResult
@@ -16,6 +17,7 @@ import com.finix.mpos.models.TransactionType
 import com.finix.mpos.sdk.MPOSConnectionCallback
 import com.finix.mpos.sdk.MPOSEMVProcessingCallback
 import com.finix.mpos.sdk.MPOSFinix
+import com.finix.mpos.sdk.MPOSSendReportCallback
 import com.finix.mpos.sdk.MPOSTransactionCallback
 import com.finix.mpossampleapplication.utils.ConfigPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -97,47 +99,50 @@ class TransactionsViewModel @Inject constructor(
         appendLog("\nStart New Transaction\n")
         setLoading(true)
 
+        viewModelScope.launch(Dispatchers.IO) {
+            kotlin.runCatching {
+                val amountInCents = (amount.toDouble() * 100).toLong()
 
-        kotlin.runCatching {
-            val amountInCents = (amount.toDouble() * 100).toLong()
-
-            mpos.startTransaction(
-                amountInCents,
-                transactionType,
-                transactionCallback(),
-                emvCallback(),
-                _splitMerchants.value.ifEmpty { null },
-                getTagsMap(tags.value)
-            )
-        }.onFailure {
-            appendLog("Transaction Error -> ${it.message}\n")
-            setLoading(false)
-            showStatus(transactionType.toString()+ "Failed!")
+                mpos.startTransaction(
+                    amountInCents,
+                    transactionType,
+                    transactionCallback(transactionType),
+                    emvCallback(),
+                    _splitMerchants.value.ifEmpty { null },
+                    getTagsMap(tags.value)
+                )
+            }.onFailure {
+                appendLog("Transaction Error -> ${it.message}\n")
+                setLoading(false)
+                showStatus(transactionType.toString()+ "Failed!")
+            }
         }
     }
 
     fun connectToTheDevice(deviceName: String, deviceAddress: String) {
+        setLoading(true)
+        appendLog("\nStart Connection to Device\n")
+
+        if (mpos.isConnected()) {
+            appendLog("Device Already Connected\n")
+            setLoading(false)
+            _isConnected.postValue(true)
+            return
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
-            setLoading(true)
-            appendLog("\nStart Connection to Device\n")
-
-            if (mpos.isConnected()) {
-                appendLog("Device Already Connected\n")
-                _isConnected.postValue(true)
-                setLoading(false)
-                return@launch
-            }
-
             runCatching {
                 mpos.connect(deviceName, deviceAddress, object : MPOSConnectionCallback {
                     override fun onSuccess() {
                         appendLog("Device Connected\n")
-                        _deviceName.value = deviceName
+                        _deviceName.postValue(deviceName)
+                        setLoading(false)
                         _isConnected.postValue(true)
                     }
 
                     override fun onError(errorMessage: String) {
                         appendLog("Device Connection Error: $errorMessage\n")
+                        setLoading(false)
                         _isConnected.postValue(false)
                     }
 
@@ -148,9 +153,8 @@ class TransactionsViewModel @Inject constructor(
             }.onFailure {
                 appendLog("Device Failed to Connect: ${it.message}\n")
                 _isConnected.postValue(false)
+                setLoading(false)
             }
-
-            setLoading(false)
         }
     }
 
@@ -181,11 +185,32 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
+    fun sendDebugData() {
+        setLoading(true)
+        appendLog("Sending debug data...\n")
+
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                mpos.sendDebugReport(object : MPOSSendReportCallback {
+                    override fun onError(errorMessage: String?) {
+                        appendLog("Send Debug Data Failed: $errorMessage\n")
+                        setLoading(false)
+                    }
+
+                    override fun onSuccess(result: LogsResponse?) {
+                        appendLog("Send Debug Data Complete\n")
+                        setLoading(false)
+                    }
+
+                })
+            }
+        }
+    }
+
     fun cancelTransaction() {
         logText += "Cancel Transaction \n"
         mpos.cancelTransaction()
     }
-
 
     fun clearLogs() {
         logText = ""
@@ -214,22 +239,24 @@ class TransactionsViewModel @Inject constructor(
     }
 
     fun showStatus(stats: String) {
-        _transactionStatus.value = stats
+        _transactionStatus.postValue(stats)
     }
 
     fun endStatus() {
-        _transactionStatus.value = ""
+        _transactionStatus.postValue("")
     }
 
-    private fun transactionCallback(): MPOSTransactionCallback = object : MPOSTransactionCallback {
+    private fun transactionCallback(transactionType: TransactionType): MPOSTransactionCallback = object : MPOSTransactionCallback {
         override fun onSuccess(result: TransactionResult?) {
             appendLog("Transaction Success\n")
             setLoading(false)
+            showStatus(transactionName(transactionType) + " Complete")
         }
 
         override fun onError(errorMessage: String) {
             appendLog("Transaction Error -> $errorMessage\n")
             setLoading(false)
+            showStatus(transactionName(transactionType) + " Failed")
         }
 
         override fun onProcessing(currentStepMessage: String) {
@@ -258,6 +285,12 @@ class TransactionsViewModel @Inject constructor(
             }
         }
         return true
+    }
+
+    fun transactionName(transactionType: TransactionType): String = when (transactionType) {
+        TransactionType.SALE -> "Sale"
+        TransactionType.AUTHORIZATION -> "Authorization"
+        TransactionType.REFUND -> "Refund"
     }
 
     fun getTagsMap(inputTag: String): Map<String, String>? {

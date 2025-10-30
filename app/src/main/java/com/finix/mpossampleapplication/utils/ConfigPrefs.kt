@@ -51,6 +51,24 @@ class ConfigPrefs @Inject constructor() {
         )
     }
 
+    fun saveSplitMerchant(context: Context, env: EnvEnum, merchant: SplitTransfer) {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+
+        val existingMerchants = loadSplitMerchants(context, env).toMutableList()
+        val index = existingMerchants.indexOfFirst { it.merchantId == merchant.merchantId }
+        if (index >= 0) {
+            existingMerchants[index] = merchant
+        } else {
+            existingMerchants.add(merchant)
+        }
+
+        val gson = Gson()
+        prefs.edit {
+            val json = gson.toJson(existingMerchants)
+            putString(key(KEY_SPLIT_MERCHANTS, env), json)
+        }
+    }
+
     fun saveSplitMerchants(context: Context, env: EnvEnum, merchants: List<SplitTransfer>) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         prefs.edit {

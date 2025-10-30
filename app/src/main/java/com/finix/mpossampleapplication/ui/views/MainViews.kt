@@ -5,11 +5,13 @@ import android.annotation.SuppressLint
 import androidx.annotation.RequiresPermission
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -46,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -117,7 +120,6 @@ fun MainViews(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                Text("DEVICE")
                 DeviceSection(
                     viewModel,
                     cardColor,
@@ -149,9 +151,6 @@ fun MainViews(
                 }
 
                 if(isConnected) {
-                    Spacer(modifier = Modifier.height(18.dp))
-
-                    Text("TRANSACTION")
                     TransactionSection(
                         viewModel,
                         cardColor,
@@ -163,9 +162,6 @@ fun MainViews(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
-
-                Text("LOGS")
                 LogSection(
                     cardColor,
                     logs = viewModel.logText,
@@ -195,74 +191,6 @@ fun MainViews(
     }
 }
 
-@Composable
-fun Progress(
-    viewModel: TransactionsViewModel,
-    isConnected: Boolean
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0x80000000))
-            .pointerInput(Unit) {
-                detectTapGestures { }
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            CircularProgressIndicator()
-            if (isConnected) {
-                Button(
-                    onClick = { viewModel.cancelTransaction() },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp),
-                    shape = RoundedCornerShape(7.dp)
-                ) {
-                    Text(
-                        text = "Cancel"
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun TransactionStatus(
-    viewModel: TransactionsViewModel,
-    status: String
-) {
-    LaunchedEffect(Unit) {
-        delay(3000)
-        viewModel.endStatus()
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0x80000000))
-            .pointerInput(Unit) {
-                detectTapGestures { }
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Button(
-                onClick = { viewModel.endStatus() },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp),
-                shape = RoundedCornerShape(7.dp)
-            ) {
-                Text(
-                    text = status
-                )
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppBar(
@@ -272,6 +200,8 @@ fun AppBar(
     onOtherSheetChange: (Boolean) -> Unit,
     onMenuExpandedChange: (Boolean) -> Unit
 ) {
+    var showResetConfirmation by remember { mutableStateOf(false)}
+
     TopAppBar(
         title = {
             Box(
@@ -289,7 +219,7 @@ fun AppBar(
                 expanded = menuExpanded,
                 onDismissRequest = { onMenuExpandedChange(false) }
             ) {
-                val menuItems = listOf("Configurations", "Reset Device", "Reset Files", "Others")
+                val menuItems = listOf("Configurations", "Reset Device", "Send Debug Data", "Others")
                 menuItems.forEach { menuItem ->
                     DropdownMenuItem(
                         onClick =
@@ -302,8 +232,8 @@ fun AppBar(
                                     "Others" -> {
                                         onOtherSheetChange(true)
                                     }
-                                    "Reset Device"   -> viewModel.resetDevice()
-                                    "Reset Files"    -> viewModel.resetFiles()
+                                    "Reset Device"   -> { showResetConfirmation = true }
+                                    "Send Debug Data"    -> viewModel.sendDebugData()
                                 }
                             },
                         text = { Text(menuItem) }
@@ -317,6 +247,29 @@ fun AppBar(
             actionIconContentColor = Color.White
         )
     )
+
+    if(showResetConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirmation = false },
+            title = { Text("Reset Device?") },
+            text = { Text("This will clear and reload files on the connected device") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.resetDevice()
+                        showResetConfirmation = false
+                    }
+                ) {
+                    Text("Reset")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -328,6 +281,7 @@ fun DeviceSection(
     onScanClick: () -> Unit,
     onDisconnectClick: () -> Unit
 ) {
+    Text("DEVICE")
     if(isConnected) {
         Box(
             modifier = Modifier
@@ -393,6 +347,11 @@ fun TransactionSection(
     onAmountChange: (String) -> Unit,
     onTransactionClick: (TransactionType) -> Unit
 ) {
+    val transactionStatus by viewModel.transactionStatus.observeAsState()
+
+    Spacer(modifier = Modifier.height(18.dp))
+    Text("TRANSACTION")
+
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(7.dp))
@@ -446,19 +405,28 @@ fun TransactionSection(
                 modifier = Modifier.padding(5.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val transactionTypes: List<Pair<String, TransactionType>> = listOf(
-                    "Sale" to TransactionType.SALE,
-                    "Auth" to TransactionType.AUTHORIZATION,
-                    "Refund" to TransactionType.REFUND
-                )
 
-                transactionTypes.forEach {(label, type) ->
-                    Button(
-                        modifier = Modifier.weight(1f),
-                        onClick = { onTransactionClick(type) },
-                        shape = RoundedCornerShape(7.dp)
-                    ) {
-                        Text(label)
+                transactionStatus?.takeIf { it.isNotBlank() }?.let {
+                    TransactionStatus(
+                        Modifier.weight(1f),
+                        viewModel,
+                        it
+                    )
+                } ?: run {
+                    val transactionTypes: List<Pair<String, TransactionType>> = listOf(
+                        "Sale" to TransactionType.SALE,
+                        "Auth" to TransactionType.AUTHORIZATION,
+                        "Refund" to TransactionType.REFUND
+                    )
+
+                    transactionTypes.forEach {(label, type) ->
+                        Button(
+                            modifier = Modifier.weight(1f),
+                            onClick = { onTransactionClick(type) },
+                            shape = RoundedCornerShape(7.dp)
+                        ) {
+                            Text(label)
+                        }
                     }
                 }
             }
@@ -483,9 +451,9 @@ fun OtherConfig(viewModel: TransactionsViewModel) {
                     if(inxex == 0) {
                         Text("Split Merchants:")
                     }
-                    val amountFormatted = String.format("%.2f", it.amount / 100.0)
+                    val amountFormatted = String.format("$%.2f", it.amount / 100.0)
                     val feeFormatted = it.fee?.takeIf { it > 0 }?.let { fee ->
-                        ", Fee: ${String.format("%.2f", fee / 100.0)}"
+                        ", Fee: ${String.format("$%.2f", fee / 100.0)}"
                     } ?: ""
 
                     Text("Merchant: ${it.merchantId}, Amount: $amountFormatted$feeFormatted")
@@ -501,35 +469,100 @@ fun LogSection(
     logs: String,
     onClearLogs: () -> Unit
 ) {
+
+    val scrollState = rememberScrollState()
+    LaunchedEffect(logs) {
+        scrollState.animateScrollTo(scrollState.maxValue)
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+
+    Row(verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 0.dp)
+    ) {
+        Text("LOGS", modifier = Modifier.weight(1f))
+        Text(
+            "CLEAR",
+            modifier = Modifier.clickable { onClearLogs() }.padding(end = 2.dp),
+            color = if (isSystemInDarkTheme())
+                Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary,
+            )
+    }
+
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(7.dp))
             .background(cardColor)
             .fillMaxWidth()
-            .height(300.dp),
+            .height(300.dp)
+            .padding(bottom = 0.dp),
     ) {
         Text(
             text = logs,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(12.dp)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
         )
     }
+}
 
-    TextButton(
+@Composable
+fun Progress(
+    viewModel: TransactionsViewModel,
+    isConnected: Boolean
+) {
+    Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 30.dp, end = 30.dp, top = 5.dp, bottom = 15.dp)
-            .height(45.dp),
-        onClick = onClearLogs,
+            .fillMaxSize()
+            .background(Color(0x80000000))
+            .pointerInput(Unit) {
+                detectTapGestures { }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator()
+            if (isConnected) {
+                Button(
+                    onClick = { viewModel.cancelTransaction() },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp),
+                    shape = RoundedCornerShape(7.dp)
+                ) {
+                    Text(
+                        text = "Cancel"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TransactionStatus(
+    modifier: Modifier,
+    viewModel: TransactionsViewModel,
+    status: String
+) {
+    LaunchedEffect(Unit) {
+        delay(2000)
+        viewModel.endStatus()
+    }
+
+    Button(
+        modifier = modifier,
+        onClick = { viewModel.endStatus() },
         shape = RoundedCornerShape(7.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color.Transparent,
-            contentColor = if (isSystemInDarkTheme()) Color.White else MaterialTheme.colorScheme.primary
+            containerColor = Color.Black.copy(alpha = 0.7f),
+            contentColor = if(status.contains("Complete")) Color.Green else Color.Red
         )
     ) {
-        Text("Clear")
+        Text(
+            text = status
+        )
     }
 }
 

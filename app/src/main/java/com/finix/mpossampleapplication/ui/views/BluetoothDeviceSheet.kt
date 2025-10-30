@@ -57,26 +57,37 @@ fun BluetoothDeviceSheet(
             color = Color.Gray,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp))
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-        ) {
-            items(devices.filter { it.name.startsWith(D135) }) { device ->
-                BluetoothDeviceItem(device.name, device.address) {
-                    viewModel.connectToTheDevice(device.name, device.address)
-                    onDismiss.invoke()
-                }
 
-                Divider(
-                    modifier = Modifier.padding(horizontal = 8.dp),
-                    color = Color.DarkGray,
-                    thickness = 0.5.dp
-                )
+        val compatibleDevices = devices.filter { it.name.startsWith(D135) }
+
+        if (compatibleDevices.isEmpty()) {
+            Text(
+                text = "No compatible devices found",
+                color = Color.Gray,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 20.dp)
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+            ) {
+                items(compatibleDevices) { device ->
+                    BluetoothDeviceItem(device.name, device.address) {
+                        viewModel.connectToTheDevice(device.name, device.address)
+                        onDismiss.invoke()
+                    }
+
+                    Divider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        color = Color.DarkGray,
+                        thickness = 0.5.dp
+                    )
+                }
             }
         }
 
         Text(
-            "Ensure your PAX device is turn on",
+            "Ensure your PAX device is turned on and paired.",
             color = Color.Gray,
             modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 15.dp, bottom = 20.dp))
 
