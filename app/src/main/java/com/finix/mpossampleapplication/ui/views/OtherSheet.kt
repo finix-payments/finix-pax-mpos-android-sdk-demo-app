@@ -1,6 +1,6 @@
 package com.finix.mpossampleapplication.ui.views
 
-import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,14 +8,17 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -38,14 +41,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.finix.mpos.models.SplitTransfer
 import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
-import com.finix.mpossampleapplication.ui.viewModels.copyWith
-import com.finix.mpossampleapplication.utils.ConfigValidator
 import com.finix.mpossampleapplication.utils.SplitTransferValidator
+import java.text.DecimalFormat
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,26 +55,24 @@ fun OtherSheet(
     viewModel: TransactionsViewModel,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var hasInitialized by remember { mutableStateOf(false) }
 
     val observedTags by viewModel.tags.collectAsState()
-    var tags by remember { mutableStateOf("") }
-
     val observedSplits by viewModel.splitMerchants.collectAsState()
+
+    var tags by remember { mutableStateOf("") }
     val splitMerchants = remember { mutableStateListOf<SplitTransfer>() }
+
     var isSplitChecked by remember { mutableStateOf(false) }
 
+    var showAddEditSplitForm by remember { mutableStateOf(false) }
+    var selectedIndex by remember { mutableStateOf(0) }
 
-    var splitValidationErrors by remember { mutableStateOf<Map<Int, Map<String,String>>>(emptyMap()) }
-
-
-    LaunchedEffect(observedTags, observedSplits) {
+    LaunchedEffect(Unit) {
         if (!hasInitialized) {
             tags = observedTags
-
             splitMerchants.clear()
             if (observedSplits.isNotEmpty()) {
                 splitMerchants.addAll(observedSplits.map { it.copy() })
@@ -81,7 +81,6 @@ fun OtherSheet(
                 splitMerchants.add(SplitTransfer(viewModel.merchantData.value.merchantId, 0))
                 isSplitChecked = false
             }
-
             hasInitialized = true
         }
     }
@@ -94,7 +93,6 @@ fun OtherSheet(
         Column(
             modifier = Modifier
                 .fillMaxHeight()
-                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             Row(
@@ -103,46 +101,25 @@ fun OtherSheet(
                     .padding(vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TextButton(onClick = { onDismiss.invoke() }) {
+                TextButton(onClick = { onDismiss() }) {
                     Text("Cancel")
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                Text(
-                    text = "Others",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.align(Alignment.CenterVertically)
-                )
+                Text("Others", style = MaterialTheme.typography.titleMedium)
 
                 Spacer(modifier = Modifier.weight(1f))
 
                 TextButton(
                     onClick = {
-                        var hasErrors = false
-
                         viewModel.saveTags(tags)
-
-                        if (isSplitChecked) {
-                            val allErrors = mutableMapOf<Int, Map<String, String>>()
-                            splitMerchants.forEachIndexed { index, row ->
-                                val validation = SplitTransferValidator.validateMerchantConfig(row)
-                                if (!validation.isValid) {
-                                    allErrors[index] = validation.errors
-                                    hasErrors = true
-                                }
-                            }
-
-                            if (!hasErrors) {
-                                viewModel.saveSplitData(splitMerchants)
-                                onDismiss()
-                            } else {
-                                splitValidationErrors = allErrors
-                            }
+                        if (isSplitChecked && splitMerchants.isNotEmpty()) {
+                            viewModel.saveSplitData(splitMerchants)
                         } else {
                             viewModel.clearSplitData()
-                            onDismiss()
                         }
+                        onDismiss()
                     }
                 ) {
                     Text("Save")
@@ -156,13 +133,14 @@ fun OtherSheet(
                 placeholder = { Text("Key:value") },
                 isError = !viewModel.isValidKeyValueFormat(tags) && tags.isNotEmpty(),
                 supportingText = {
-                    if (tags.isNotEmpty() && viewModel.isValidKeyValueFormat(tags)) {
+                    if (tags.isNotEmpty() && !viewModel.isValidKeyValueFormat(tags)) {
                         Text("Invalid format. Use key:value, key2:value2")
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             )
 
+            // --- Split toggle ---
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center,
@@ -170,60 +148,140 @@ fun OtherSheet(
                     .fillMaxWidth()
                     .padding(top = 18.dp)
             ) {
-                Text(text = "Split Transfer")
-                Spacer(modifier = Modifier.width(5.dp))
+                Text("Split Transfer")
+                Spacer(Modifier.width(5.dp))
                 Checkbox(
                     checked = isSplitChecked,
-                    onCheckedChange =
-                        {
-                            isSplitChecked = it
-                            splitMerchants.clear()
-                            splitMerchants.add(SplitTransfer(merchantId = viewModel.merchantData.value.merchantId, 0))
-                        },
+                    onCheckedChange = { checked ->
+                        isSplitChecked = checked
+                        if (!checked) splitMerchants.clear()
+                        else if (splitMerchants.isEmpty()) {
+                            splitMerchants.add(
+                                SplitTransfer(viewModel.merchantData.value.merchantId, 0)
+                            )
+                        }
+                    }
                 )
             }
 
             if (isSplitChecked) {
-                splitMerchants.forEachIndexed { index, row ->
-                    SplitMerchantRow(
-                        index = index,
-                        merchantData = row,
-                        isLastItem = index == splitMerchants.lastIndex,
-                        onAddClick = {
-                            if(viewModel.isValidSplitMerchants(splitMerchants)) {
-                                splitMerchants.add(SplitTransfer("", 0))
-                            } else {
-                                Toast.makeText(context, "ID or Amount missing for some merchants!", Toast.LENGTH_SHORT).show()
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxHeight(0.8f)
+                        .padding(vertical = 8.dp)
+                ) {
+                    itemsIndexed(splitMerchants) { index, row ->
+                        SplitMerchantItem(
+                            index = index,
+                            merchantData = row,
+                            onDelete = { i ->
+                                if (splitMerchants.size == 1) {
+                                    splitMerchants.clear()
+                                    isSplitChecked = false
+                                } else {
+                                    splitMerchants.removeAt(i)
+                                }
+                            },
+                            onClick = {
+                                selectedIndex = index
+                                showAddEditSplitForm = true
                             }
-                        },
-                        onChange = { i, updatedRow ->
-                            splitMerchants[i] = updatedRow
-                            splitValidationErrors = splitValidationErrors - i // Clear only this row's errors
-                        },
-                        onDelete = { i ->
-                            if(splitMerchants.size == 1) {
-                                splitMerchants.clear()
-                                isSplitChecked = false
-                            } else if (splitMerchants.size > 1) {
-                                splitMerchants.removeAt(i)
+                        )
+                    }
+
+                    item {
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                selectedIndex = splitMerchants.size
+                                showAddEditSplitForm = true
                             }
-                        },
-                        validationErrors = splitValidationErrors[index] ?: emptyMap()
-                    )
+                        ) {
+                            Text("+ Add Split Transfer")
+                        }
+                    }
                 }
             }
         }
     }
+
+    if (showAddEditSplitForm) {
+        splitMerchantDialog(
+            index = selectedIndex,
+            showDialog = true,
+            initialMerchant = if(selectedIndex == splitMerchants.size) SplitTransfer("", 0) else splitMerchants.get(selectedIndex),
+            onDismiss = { showAddEditSplitForm = false },
+            onSave = { updatedMerchant ->
+                if (selectedIndex < splitMerchants.size) {
+                    splitMerchants[selectedIndex] = updatedMerchant
+                } else {
+                    splitMerchants.add(updatedMerchant)
+                }
+                showAddEditSplitForm = false
+            }
+        )
+    }
+}
+
+
+@Composable
+fun splitMerchantDialog(
+    index: Int,
+    showDialog: Boolean,
+    initialMerchant: SplitTransfer,
+    onDismiss: () -> Unit,
+    onSave: (SplitTransfer) -> Unit
+) {
+    if (showDialog) {
+        var editableMerchant by remember { mutableStateOf(initialMerchant) }
+        var validationErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Split Merchant") },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    SplitMerchantForm(
+                        index = index,
+                        merchantData = editableMerchant,
+                        isLastItem = false,
+                        onChange = { _, updated -> editableMerchant = updated },
+                        validationErrors = validationErrors
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val result = SplitTransferValidator.validateMerchantConfig(editableMerchant)
+                        if (result.isValid) {
+                            onSave(editableMerchant)
+                            onDismiss
+                        } else {
+                            validationErrors = result.errors
+                        }
+                    }
+                ) {
+                    Text("Done")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        )
+    }
 }
 
 @Composable
-fun SplitMerchantRow(
+fun SplitMerchantForm(
     index: Int,
     merchantData: SplitTransfer,
     isLastItem: Boolean,
-    onAddClick: () -> Unit,
     onChange: (Int, SplitTransfer) -> Unit,
-    onDelete: (Int) -> Unit,
     validationErrors: Map<String, String> = emptyMap()
 ) {
     var tagsInput by rememberSaveable { mutableStateOf(
@@ -291,23 +349,87 @@ fun SplitMerchantRow(
                 },
                 modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+@Composable
+fun SplitMerchantItem(
+    index: Int,
+    merchantData: SplitTransfer,
+    onDelete: (Int) -> Unit,
+    onClick: () -> Unit
+) {
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 20.dp)
+            .clickable { onClick() }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Merchant ${index + 1}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium.copy(
+                    textDecoration = TextDecoration.Underline
+                ))
 
             if (index > 0) {
                 IconButton(
-                    onClick = { onDelete(index) },
-                    modifier = Modifier.padding(start = 8.dp)
+                    onClick = { showDeleteConfirmation = true },
+                    modifier = Modifier.padding(start = 3.dp).height(20.dp)
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = "Delete Row")
                 }
             }
         }
+        Column() {
+            Text(text = "Merchant ID: ${merchantData.merchantId}")
+            val decimalFormat = DecimalFormat("#,##0.00")
 
-        if(isLastItem) {
-            IconButton(onClick = onAddClick) {
-                Icon(Icons.Default.Add, contentDescription = "Add Row")
+            Text(
+                text = buildString {
+                    val amountValue = (merchantData.amount.takeIf { it > 0 } ?: 0) / 100.0
+                    append("Amount: $${decimalFormat.format(amountValue)}")
+
+                    val feeValue = (merchantData.fee ?: 0L) / 100.0
+                    if (feeValue > 0) {
+                        append(", Fee: $${decimalFormat.format(feeValue)}")
+                    }
+                }
+            )
+
+            if(merchantData.tags?.isNotEmpty() == true) {
+                Text(text = "Tags: ${merchantData.tags!!.entries.toString()}")
             }
         }
-        Spacer(modifier = Modifier.width(10.dp))
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete Split Transfer") },
+            text = { Text("Are you sure you want to delete this Merchant?") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(index)
+                        showDeleteConfirmation = false
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
