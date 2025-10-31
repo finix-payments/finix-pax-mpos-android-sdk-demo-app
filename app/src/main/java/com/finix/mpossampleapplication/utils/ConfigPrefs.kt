@@ -26,6 +26,20 @@ class ConfigPrefs @Inject constructor() {
 
     private fun key(key: String, env: EnvEnum) = "${key}_${env.name}"
 
+    fun saveConfigurations(context: Context) {
+        saveConfigurations(
+            context, MerchantData(
+                merchantId = "MUvnJCJShHXdCNeYGZfeaGz5",
+                mid = "66849632-ac62-4d02-8ec4-5a7b3531dd35",
+                deviceId = "DVgES8Bgh8oXH1b9u9gprgBE",
+                env = EnvEnum.QA, // Possible values are (qa, sandbox, production)
+                userId = "UShAp6gLzz57FtmE5XFpd5bP",
+                password = "ef3d2c71-6ca6-4905-86a3-1f21d34fc397"
+
+            )
+        )
+    }
+
     fun saveConfigurations(context: Context, data: MerchantData) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
         prefs.edit().apply {

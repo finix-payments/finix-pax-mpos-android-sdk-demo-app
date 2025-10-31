@@ -38,6 +38,10 @@ class TransactionsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val configPrefs: ConfigPrefs
 ) : ViewModel() {
+
+    init {
+        configPrefs.saveConfigurations(context)
+    }
     private lateinit var mpos: MPOSFinix
 
     private val _deviceName = MutableLiveData("")
