@@ -29,12 +29,12 @@ class ConfigPrefs @Inject constructor() {
     fun saveConfigurations(context: Context) {
         saveConfigurations(
             context, MerchantData(
-                merchantId = "MUvnJCJShHXdCNeYGZfeaGz5",
-                mid = "66849632-ac62-4d02-8ec4-5a7b3531dd35",
-                deviceId = "DVgES8Bgh8oXH1b9u9gprgBE",
-                env = EnvEnum.QA, // Possible values are (qa, sandbox, production)
-                userId = "UShAp6gLzz57FtmE5XFpd5bP",
-                password = "ef3d2c71-6ca6-4905-86a3-1f21d34fc397"
+                merchantId = "MUi6m4mp2Cd4U7mWDS9u5Tms",
+                mid = "ca4c8030-cd97-4bb6-b0b1-dca6e62de084",
+                deviceId = "DVoTBbYexVhhrJwByZ7YYDAb",
+                env = EnvEnum.PROD, // Possible values are (qa, sandbox, production)
+                userId = "US8JWkZ9eJHDix6WHiye6d9p",
+                password = "32ac6189-635a-4d8a-b660-671c2a06aa57"
 
             )
         )
