@@ -8,6 +8,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.finix.mpos.models.Currency
 import com.finix.mpos.models.EnvEnum
 import com.finix.mpos.models.LogsResponse
 import com.finix.mpos.models.MerchantData
@@ -56,24 +57,40 @@ class TransactionsViewModel @Inject constructor(
         private set
 
     private val _merchantData = MutableStateFlow<MerchantData>(
-        loadConfigurations(configPrefs.loadCurrentEnvironment(context))
+        MerchantData(
+            env = EnvEnum.PROD,
+            merchantId = "",
+            mid = "",
+            deviceId = "",
+            currency = Currency.USD,
+            userId = "",
+            password = ""
+        )
     )
+
     val merchantData: StateFlow<MerchantData> = _merchantData.asStateFlow()
 
-    private val _splitMerchants = MutableStateFlow<List<SplitTransfer>>(
-        configPrefs.loadSplitMerchants(context = context, env = merchantData.value.env)
-    )
+    private val _splitMerchants = MutableStateFlow<List<SplitTransfer>>(emptyList())
     var splitMerchants = _splitMerchants
 
 
-    private val _tags = MutableStateFlow<String>(
-        configPrefs.loadTags(context, merchantData.value.env)
-    )
+    private val _tags = MutableStateFlow<String>("")
     val tags: StateFlow<String> = _tags
 
     fun saveTags(tags: String) {
         _tags.value = tags
         configPrefs.saveTags(context, merchantData.value.env, tags)
+    }
+
+    init {
+        try {
+            val env = configPrefs.loadCurrentEnvironment(context)
+            _merchantData.value = loadConfigurations(env)
+            _splitMerchants.value = configPrefs.loadSplitMerchants(context, env)
+            _tags.value = configPrefs.loadTags(context, env)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun initializeDevice(context: Context) {
@@ -82,6 +99,7 @@ class TransactionsViewModel @Inject constructor(
 
     fun saveMerchantData(updatedMerchantData: MerchantData) {
         _merchantData.value = updatedMerchantData
+        mpos = MPOSFinix(context, merchantData.value) // reinitialize with the new merchant data
         configPrefs.saveConfigurations(context, updatedMerchantData)
     }
 
@@ -127,6 +145,7 @@ class TransactionsViewModel @Inject constructor(
             appendLog("Device Already Connected\n")
             setLoading(false)
             _isConnected.postValue(true)
+            _deviceName.postValue(deviceName)
             return
         }
 
@@ -155,18 +174,6 @@ class TransactionsViewModel @Inject constructor(
                 _isConnected.postValue(false)
                 setLoading(false)
             }
-        }
-    }
-
-    fun resetFiles() {
-        viewModelScope.launch {
-            setLoading(true)
-            appendLog("Reset Files\n")
-            withContext(Dispatchers.IO) {
-                mpos.resetFilesToDevice()
-            }
-            appendLog("Reset Files Complete\n")
-            setLoading(false)
         }
     }
 
@@ -208,8 +215,10 @@ class TransactionsViewModel @Inject constructor(
     }
 
     fun cancelTransaction() {
-        logText += "Cancel Transaction \n"
-        mpos.cancelTransaction()
+        viewModelScope.launch(Dispatchers.IO) {
+            logText += "Cancel Transaction \n"
+            mpos.cancelTransaction()
+        }
     }
 
     fun clearLogs() {
@@ -217,16 +226,24 @@ class TransactionsViewModel @Inject constructor(
     }
 
     fun destroy() {
-        appendLog(
-            if (mpos.isConnected()) {
-                mpos.finishTransaction()
-                mpos.disconnect()
-                _isConnected.postValue(false)
-                "Device Disconnected\n"
-            } else {
-                "Device Not Connected\n"
+        viewModelScope.launch(Dispatchers.IO) {
+            val message = try {
+                mpos.let {
+                    if (it.isConnected()) {
+                        it.finishTransaction()
+                        it.disconnect()
+                        _isConnected.postValue(false)
+                        "Device Disconnected"
+                    } else {
+                        "Device Not Connected"
+                    }
+                }
+            } catch (e: Exception) {
+                "Error disconnecting device: ${e.message}"
             }
-        )
+
+            appendLog("$message\n")
+        }
     }
 
     private fun appendLog(message: String) {
@@ -276,15 +293,6 @@ class TransactionsViewModel @Inject constructor(
 
     fun loadConfigurations(env: EnvEnum): MerchantData {
         return configPrefs.loadConfigurations(context = context, env)
-    }
-
-    fun isValidSplitMerchants(merchants: List<SplitTransfer>): Boolean {
-        merchants.forEach {
-            if(it.merchantId.isEmpty() || it.amount<=0) {
-                return false
-            }
-        }
-        return true
     }
 
     fun transactionName(transactionType: TransactionType): String = when (transactionType) {

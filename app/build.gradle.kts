@@ -79,6 +79,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
-    implementation("com.finix:pax-mpos-sdk-android:3.2.5-SNAPSHOT")
+    implementation("com.finix:pax-mpos-sdk-android:3.2.7-SNAPSHOT")
 
 }

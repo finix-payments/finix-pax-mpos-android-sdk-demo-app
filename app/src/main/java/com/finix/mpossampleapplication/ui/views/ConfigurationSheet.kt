@@ -74,7 +74,6 @@ fun ConfigurationSheet(
 
     var validationErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
