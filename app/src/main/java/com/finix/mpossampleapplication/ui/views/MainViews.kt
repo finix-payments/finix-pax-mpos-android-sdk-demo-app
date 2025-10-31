@@ -85,7 +85,7 @@ fun MainViews(
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var otherSheet by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf("3.14") }
-    val cardColor = if(isSystemInDarkTheme()) Color.DarkGray else Color.LightGray
+    val cardColor = Color.LightGray
 
     Scaffold(
         topBar = {

@@ -1,0 +1,16 @@
+{
+  "PROD": {
+    "deviceId": "",
+    "merchantId": "",
+    "mid": "",
+    "userId": "",
+    "password": ""
+  },
+  "SB": {
+    "deviceId": "",
+    "merchantId": "",
+    "mid": "",
+    "userId": "",
+    "password": ""
+  }
+}
