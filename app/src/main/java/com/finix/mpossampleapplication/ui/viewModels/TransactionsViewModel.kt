@@ -265,13 +265,17 @@ class TransactionsViewModel @Inject constructor(
 
     private fun transactionCallback(transactionType: TransactionType): MPOSTransactionCallback = object : MPOSTransactionCallback {
         override fun onSuccess(result: TransactionResult?) {
-            appendLog("Transaction Success\n")
+            result?.id
+                ?.takeIf { it.isNotBlank() }
+                ?.let { appendLog("${transactionName(transactionType)} id: $it\n") }
+            appendLog("✅ Transaction Success \n")
+
             setLoading(false)
             showStatus(transactionName(transactionType) + " Complete")
         }
 
         override fun onError(errorMessage: String) {
-            appendLog("Transaction Error -> $errorMessage\n")
+            appendLog("❌ Transaction Error -> $errorMessage\n")
             setLoading(false)
             showStatus(transactionName(transactionType) + " Failed")
         }
@@ -293,6 +297,10 @@ class TransactionsViewModel @Inject constructor(
 
     fun loadConfigurations(env: EnvEnum): MerchantData {
         return configPrefs.loadConfigurations(context = context, env)
+    }
+
+    fun loadEnvironments(): List<EnvEnum> {
+        return configPrefs.loadEnvironments(context)
     }
 
     fun transactionName(transactionType: TransactionType): String = when (transactionType) {
