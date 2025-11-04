@@ -132,7 +132,7 @@ class TransactionsViewModel @Inject constructor(
             }.onFailure {
                 appendLog("Transaction Error -> ${it.message}\n")
                 setLoading(false)
-                showStatus(transactionType.toString()+ "Failed!")
+                showStatus(transactionType.toString()+ " Failed!")
             }
         }
     }
