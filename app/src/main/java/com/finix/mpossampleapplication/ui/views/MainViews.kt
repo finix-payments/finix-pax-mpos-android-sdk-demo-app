@@ -61,6 +61,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -86,6 +88,8 @@ fun MainViews(
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var otherSheet by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf("3.14") }
+    val currentEnvironment by remember { mutableStateOf(viewModel.merchantData.value.env.displayName) }
+
     val cardColor = Color.LightGray
 
     Scaffold(
@@ -129,6 +133,14 @@ fun MainViews(
                     onScanClick = { showBottomSheet = true },
                     onDisconnectClick = { showDisconnectDialog = true }
                 )
+
+                if (isConnected) {
+                    Text(
+                        "Selected environment: ${currentEnvironment}", style = TextStyle(
+                            fontStyle = FontStyle.Italic
+                        )
+                    )
+                }
 
                 if (showDisconnectDialog) {
                     AlertDialog(
