@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -348,6 +349,12 @@ fun TransactionSection(
     onTransactionClick: (TransactionType) -> Unit
 ) {
     val transactionStatus by viewModel.transactionStatus.observeAsState()
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    fun filterAmountInput(input: String): String {
+        val regex = Regex("^\\d*(\\.\\d{0,2})?$")
+        return if (regex.matches(input)) input else amount
+    }
 
     Spacer(modifier = Modifier.height(18.dp))
     Text("TRANSACTION")
@@ -373,7 +380,11 @@ fun TransactionSection(
 
                 TextField(
                     value = amount,
-                    onValueChange = onAmountChange,
+                    onValueChange =
+                        {
+                            val filtered = filterAmountInput(it)
+                            onAmountChange(filtered)
+                        },
                     modifier = Modifier
                         .weight(1f)
                         .heightIn(min = 42.dp)
@@ -422,7 +433,11 @@ fun TransactionSection(
                     transactionTypes.forEach {(label, type) ->
                         Button(
                             modifier = Modifier.weight(1f),
-                            onClick = { onTransactionClick(type) },
+                            onClick =
+                                {
+                                    keyboardController?.hide()
+                                    onTransactionClick(type)
+                                },
                             shape = RoundedCornerShape(7.dp)
                         ) {
                             Text(label)
