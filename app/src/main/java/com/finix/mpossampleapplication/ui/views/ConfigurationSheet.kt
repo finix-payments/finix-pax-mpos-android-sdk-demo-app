@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,26 +52,25 @@ fun ConfigurationSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val environments = listOf(EnvEnum.PROD, EnvEnum.SB)
-    val envDisplayNames = mapOf(
-        EnvEnum.PROD to "Production",
-        EnvEnum.SB to "Sandbox"
-    )
+    var environments by remember { mutableStateOf(listOf(EnvEnum.PROD, EnvEnum.SB)) }
+    var merchantDataMap by remember { mutableStateOf<Map<EnvEnum, MerchantData>>(emptyMap()) }
 
     val merchantData by viewModel.merchantData.collectAsState()
     var selectedEnvironment by remember { mutableStateOf(merchantData.env) }
+    var validationErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
-    val merchantDataMap = remember {
-        mutableStateMapOf<EnvEnum, MerchantData>().apply {
-            environments.forEach { env ->
-                this[env] = viewModel.loadConfigurations(env)
-            }
+    LaunchedEffect(Unit) {
+        environments = viewModel.loadEnvironments()
+        merchantDataMap = environments.associateWith { env ->
+            viewModel.loadConfigurations(env)
+        }
+
+        if (!sheetState.isVisible) {
+            sheetState.show()
         }
     }
 
     val currentEditedData = merchantDataMap[selectedEnvironment] ?: merchantData
-
-    var validationErrors by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -126,7 +124,7 @@ fun ConfigurationSheet(
 
             Column {
                 TabRow(
-                    selectedTabIndex = environments.indexOf(selectedEnvironment),
+                    selectedTabIndex = environments.indexOf(selectedEnvironment).takeIf { it >= 0 } ?: 0,
                     modifier = Modifier
                         .fillMaxWidth(),
                     containerColor = Color.LightGray
@@ -136,8 +134,12 @@ fun ConfigurationSheet(
                             selected = selectedEnvironment ==  env,
                             onClick = {
                                 selectedEnvironment = env
+                                merchantDataMap = environments.associateWith { env ->
+                                    viewModel.loadConfigurations(env)
+                                }
+                                validationErrors = emptyMap()
                             },
-                            text = { Text(envDisplayNames[env] ?: env.name)  }
+                            text = { Text(env.displayName) }
                         )
                     }
                 }
@@ -146,17 +148,13 @@ fun ConfigurationSheet(
             MerchantDataForm(
                 merchantData = currentEditedData,
                 onChange = { updated ->
-                    merchantDataMap[selectedEnvironment] = updated
+                    merchantDataMap = merchantDataMap.toMutableMap().apply {
+                        this[selectedEnvironment] = updated
+                    }
                     validationErrors = emptyMap()
                 },
                 validationErrors = validationErrors
             )
-
-            LaunchedEffect(Unit) {
-                if (!sheetState.isVisible) {
-                    sheetState.show()
-                }
-            }
         }
     }
 }

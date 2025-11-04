@@ -11,7 +11,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -24,6 +23,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -61,6 +61,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -87,6 +89,9 @@ fun MainViews(
     var otherSheet by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf("3.14") }
     val cardColor = Color.LightGray
+
+    val merchantData by viewModel.merchantData.collectAsState()
+    val currentEnvironment = merchantData.env.displayName
 
     Scaffold(
         topBar = {
@@ -129,6 +134,17 @@ fun MainViews(
                     onScanClick = { showBottomSheet = true },
                     onDisconnectClick = { showDisconnectDialog = true }
                 )
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Selected environment: ${currentEnvironment}", style = TextStyle(
+                            fontStyle = FontStyle.Italic
+                        )
+                    )
+                }
 
                 if (showDisconnectDialog) {
                     AlertDialog(
@@ -512,13 +528,15 @@ fun LogSection(
             .height(300.dp)
             .padding(bottom = 0.dp),
     ) {
-        Text(
-            text = logs,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp)
-                .verticalScroll(scrollState)
-        )
+        SelectionContainer {
+            Text(
+                text = logs,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(12.dp)
+                    .verticalScroll(scrollState)
+            )
+        }
     }
 }
 
