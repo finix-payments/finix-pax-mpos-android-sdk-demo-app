@@ -18,7 +18,7 @@ This guide is a quick start guide for adding **FINIX PAX MPOS SDK** to Java/Andr
 
 Add the mPOS SDK dependency to your gradle file. See [Maven Central](https://central.sonatype.com/artifact/com.finix/pax-mpos-sdk-android) or [MVN Repository](https://mvnrepository.com/artifact/com.finix/pax-mpos-sdk-android) for the latest version.
 
-`com.finix:pax-mpos-sdk-android:2.1.1`
+`com.finix:pax-mpos-sdk-android:3.3.4`
 
 ##### Initialization
 
@@ -47,24 +47,36 @@ context: Android application context
 merchantData: Specific values which help identify the merchant
 
 class MerchantData (
-    val merchantId: String,     //Merchant Id from Finix starting with MUxxxx
-    val mid: String,            //Finix mid (GUID representation)
-    val deviceId: String,       //Device ID - device registers with Finix
-    val currency: String = "USD",
-    val env: String = "sandbox",   // sandbox, qa or production
-    val userId : String, // Role Partner UserId
-    val password: String //  Role partner password
+    // Merchant Id from Finix starting with MUxxxx
+    val merchantId: String,
+    
+    // Finix mid (GUID representation)
+    val mid: String,
+    
+    // Device ID - device registers with Finix, starting with DVxxxx
+    val deviceId: String,
+    
+    val currency: Currency = Currency.USD,
+    
+    // Sandbox or Production
+    val env: EnvEnum = EnvEnum.SB,
+    
+    // ROLE_MERCHANT or ROLE_PARTNER UserId
+    val userId : String,
+    
+    //  ROLE_MERCHANT or ROLE_PARTNER password
+    val password: String
 )
 
 Example : val mpos = MPOSFinix(
-  context,
-  MerchantData(
-        merchantId = "Murc",
-        mid = "3f4-b8f-40",
-        deviceId = "DVvyDYD",
-        env = "qa",
-        userId = "US9jv",
-        password = "8c5-046-40c"
+    context,
+    MerchantData(
+        merchantId = "MUxxxxxx",
+        mid = "",
+        deviceId = "DVxxxxx",
+        env = EnvEnum.SB,
+        userId = "USxxxxxxxxx",
+        password = ""
   )
 )
 ```
@@ -96,16 +108,20 @@ to remove it.
 
 ```
 fun startTransaction(
-  amount: Long, 
-  transactionType: String, 
-  transactionCallback: MPOSTransactionCallback,
-  configureEMVResponseCallback: MPOSEMVProcessingCallback
- )
+        amount: Long,
+        transactionType: TransactionType
+        transactionCallback: MPOSTransactionCallback,
+        configureEMVResponseCallback: MPOSEMVProcessingCallback,
+        splitTransfers: List<SplitTransfer>? = null,
+        tags: Map<String, String>? = null
+    )
 
-amount : amount in cents for $10.10 this value would be 1010
-transactionType : "Sale", "Auth", Refund" only one of these values should be passed
+amount : amount in cents for \$10.10 this value would be 1010
+transactionType : TransactionType enum with support for only Sale, Refund and Authorization
 transactionCallback : Exposes functions which are invoked with status of the transaction or the Transaction Result
 configureEMVResponseCallback: Exposes functions which are invoked to with status of authorizing a card insert
+splitTransfers: Optional list of split transfer request data
+tags: Optional map of key/value strings to be provided in the request
 
 interface MPOSTransactionCallback {
     fun onSuccess(result: TransactionResult?) // Called if the transaction is successfully processed
@@ -129,11 +145,12 @@ fun startRefund(
     transactionId: String,
     refundAmount: Long,
     refundCallback: MPOSRefundCallback
+    tags: Map<String, String>? = null
 )
 
 transactionId : The transaction id specified correlating to a previous transaction. The ID is returned as part of the TransactionResult
 in the above start transaction
-refundAmount : amount in cents for $10.10 this value would be 1010
+refundAmount : amount in cents for \$10.10 this value would be 1010
 refundCallback : Exposes functions which are invoked with status of the refund or the Refund Result
 ```
 
