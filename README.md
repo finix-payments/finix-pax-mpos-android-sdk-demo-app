@@ -18,7 +18,7 @@ This guide is a quick start guide for adding **FINIX PAX MPOS SDK** to Java/Andr
 
 Add the mPOS SDK dependency to your gradle file. See [Maven Central](https://central.sonatype.com/artifact/com.finix/pax-mpos-sdk-android) or [MVN Repository](https://mvnrepository.com/artifact/com.finix/pax-mpos-sdk-android) for the latest version.
 
-`com.finix:pax-mpos-sdk-android:2.1.1`
+`com.finix:pax-mpos-sdk-android:3.1.1`
 
 ##### Initialization
 
