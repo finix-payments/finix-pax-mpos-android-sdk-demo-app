@@ -51,7 +51,7 @@ class MerchantData (
     val mid: String,            //Finix mid (GUID representation)
     val deviceId: String,       //Device ID - device registers with Finix
     val currency: String = "USD",
-    val env: String = "sandbox",   // sandbox, qa or production
+    val env: EnvEnum = EnvEnum.SB,   // SB = sandbox or  PROD = production
     val userId : String, // Role Partner UserId
     val password: String //  Role partner password
 )
@@ -59,10 +59,10 @@ class MerchantData (
 Example : val mpos = MPOSFinix(
   context,
   MerchantData(
-        merchantId = "Murc",
+        merchantId = "MUrc",
         mid = "3f4-b8f-40",
         deviceId = "DVvyDYD",
-        env = "qa",
+        env = EnvEnum.SB,
         userId = "US9jv",
         password = "8c5-046-40c"
   )
@@ -96,16 +96,19 @@ to remove it.
 
 ```
 fun startTransaction(
-  amount: Long, 
-  transactionType: String, 
-  transactionCallback: MPOSTransactionCallback,
-  configureEMVResponseCallback: MPOSEMVProcessingCallback
+     amount: Long,
+     transactionType: TransactionType,
+     transactionCallback: MPOSTransactionCallback,
+     configureEMVResponseCallback: MPOSEMVProcessingCallback,
+     splitTransfers: List<SplitTransfer>? = null,
+     tags: Map<String, String>? = null
  )
-
 amount : amount in cents for $10.10 this value would be 1010
-transactionType : "Sale", "Auth", Refund" only one of these values should be passed
-transactionCallback : Exposes functions which are invoked with status of the transaction or the Transaction Result
+transactionType: SALE, AUTH, REFUND (one of these values should be passed)
+transactionCallback : Callback interface that provides updates on the transaction status or the TransactionResult
 configureEMVResponseCallback: Exposes functions which are invoked to with status of authorizing a card insert
+splitTransfers: Optional list of split merchant details to be passed if split transfers are enabled
+tags: A list of key–value pairs for attaching additional metadata to the transaction
 
 interface MPOSTransactionCallback {
     fun onSuccess(result: TransactionResult?) // Called if the transaction is successfully processed
@@ -141,18 +144,14 @@ refundCallback : Exposes functions which are invoked with status of the refund o
 
 Please see the sample app to see how to interact with the SDK. The App works as follows:
 
-1. Ensure the mPOS device (D135) has been paired to your phone/tablet via bluetooth.
-2. Launch the app
-3. To connect the app to the device, first click the `Scan for Devices` button. This will scan for
-   currently paired bluetooth devices.
-4. Once the button is clicked a dialog would open showing a list of currently paired bluetooth
-   devices
-5. Select the mPOS device. This will begin the process of connecting to the device and a loading
-   spinner will be shown. You can observe the log output on the screen as it outputs messages of
-   current progress
-6. Once the connection is complete and successful, one can initiate transactions by typing the
-   amount into the `TextField` with the default value of `3.14` and clicking one
-   of `Sale, Auth, Refund`
+1. Pair the mPOS device (D135): Ensure the D135 device is paired with your phone/tablet via Bluetooth.
+2. Launch the app: Open the application on your device. 
+3. Scan for devices: Tap `Scan for Devices` to search for currently paired Bluetooth devices.
+4. Select the mPOS device: A dialog will appear listing paired D135 devices. Select your device to start the connection process.
+A loading spinner will appear, and you can monitor connection progress through the on-screen logs.
+5. Configure merchant data: Open the Configuration menu, enter the merchant details, and tap Save. 
+6. Configure optional data: Open the Others menu, enter the tag and split transfer details, and tap Save.
+7. Initiate a transaction: Enter an amount in the TextField (default: `3.14`) and choose one of the following actions: `Sale, Auth, Refund`.
 
 Note: The app requires the addition of retrofit as a dependency due to proguard issues with the AAR
 
