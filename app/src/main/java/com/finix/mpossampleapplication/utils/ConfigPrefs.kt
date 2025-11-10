@@ -10,6 +10,8 @@ import com.finix.mpos.models.SplitTransfer
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import javax.inject.Inject
 
 class ConfigPrefs @Inject constructor() {
@@ -57,11 +59,27 @@ class ConfigPrefs @Inject constructor() {
             deviceId = prefs.getString(key(KEY_DEVICE_ID, env), "") ?: "",
             merchantId = prefs.getString(key(KEY_MERCHANT_ID, env), "") ?: "",
             mid = prefs.getString(key(KEY_MERCHANT_MID, env), "") ?: "",
-            env = env,
             userId = prefs.getString(key(KEY_API_USERNAME, env), "") ?: "",
             password = prefs.getString(key(KEY_API_PASSWORD, env), "") ?: "",
+            env = env,
             currency = Currency.USD
         )
+    }
+    fun loadEnvironments(context: Context): List<EnvEnum> {
+        try {
+            val jsonString = context.assets.open(CONFIG_FILE_NAME).bufferedReader().use { it.readText() }
+            if (jsonString.isNotBlank()) {
+                val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
+                val envs = jsonObject.keys.mapNotNull { key ->
+                    runCatching { EnvEnum.valueOf(key) }.getOrNull()
+                }
+                if(envs.isNotEmpty()) return envs
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
+        return listOf(EnvEnum.PROD, EnvEnum.SB)
     }
 
 

@@ -67,10 +67,10 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.runtime:runtime-livedata")
-    implementation ("com.google.dagger:hilt-android:2.51")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.compose.foundation:foundation:1.9.4")
-    kapt ("com.google.dagger:hilt-compiler:2.51")
+    implementation ("com.google.dagger:hilt-android:2.55")
+    kapt ("com.google.dagger:hilt-compiler:2.55")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
@@ -78,6 +78,7 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
     implementation("com.finix:pax-mpos-sdk-android:3.3.4")
 
