@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -41,8 +42,8 @@ class TransactionsViewModel @Inject constructor(
 ) : ViewModel() {
     private lateinit var mpos: MPOSFinix
 
-    private val _deviceName = MutableLiveData("")
-    val deviceName: LiveData<String?> = _deviceName
+    private val _connectedDeviceName = MutableLiveData("")
+    val connectedDeviceName: LiveData<String?> = _connectedDeviceName
 
     private val _isLoading = MutableLiveData(false)
     val isLoading: LiveData<Boolean> = _isLoading
@@ -56,7 +57,7 @@ class TransactionsViewModel @Inject constructor(
     var logText by mutableStateOf("")
         private set
 
-    private val _merchantData = MutableStateFlow<MerchantData>(
+    private val _merchantData = MutableStateFlow(
         MerchantData(
             env = EnvEnum.PROD,
             merchantId = "",
@@ -73,8 +74,7 @@ class TransactionsViewModel @Inject constructor(
     private val _splitMerchants = MutableStateFlow<List<SplitTransfer>>(emptyList())
     var splitMerchants = _splitMerchants
 
-
-    private val _tags = MutableStateFlow<String>("")
+    private val _tags = MutableStateFlow("")
     val tags: StateFlow<String> = _tags
 
     fun saveTags(tags: String) {
@@ -84,6 +84,12 @@ class TransactionsViewModel @Inject constructor(
 
     init {
         try {
+            viewModelScope.launch {
+                _merchantData.collectLatest { data ->
+                    mpos = MPOSFinix(context, data)
+                }
+            }
+
             val env = configPrefs.loadCurrentEnvironment(context)
             _merchantData.value = loadConfigurations(env)
             _splitMerchants.value = configPrefs.loadSplitMerchants(context, env)
@@ -93,13 +99,8 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    fun initializeDevice(context: Context) {
-        mpos = MPOSFinix(context, merchantData.value)
-    }
-
     fun saveMerchantData(updatedMerchantData: MerchantData) {
         _merchantData.value = updatedMerchantData
-        mpos = MPOSFinix(context, merchantData.value) // reinitialize with the new merchant data
         configPrefs.saveConfigurations(context, updatedMerchantData)
     }
 
@@ -109,7 +110,7 @@ class TransactionsViewModel @Inject constructor(
     }
 
     fun clearSplitData() {
-        _splitMerchants.value = emptyList<SplitTransfer>()
+        _splitMerchants.value = emptyList()
         configPrefs.clearSplitMerchants(context, merchantData.value.env)
     }
 
@@ -132,7 +133,7 @@ class TransactionsViewModel @Inject constructor(
             }.onFailure {
                 appendLog("Transaction Error -> ${it.message}\n")
                 setLoading(false)
-                showStatus(transactionType.toString()+ " Failed!")
+                showStatus("$transactionType Failed!")
             }
         }
     }
@@ -142,11 +143,16 @@ class TransactionsViewModel @Inject constructor(
         appendLog("\nStart Connection to Device\n")
 
         if (mpos.isConnected()) {
-            appendLog("Device Already Connected\n")
-            setLoading(false)
-            _isConnected.postValue(true)
-            _deviceName.postValue(deviceName)
-            return
+            if (deviceName == connectedDeviceName.value) {
+                appendLog("Device Already Connected\n")
+                setLoading(false)
+                _isConnected.postValue(true)
+                _connectedDeviceName.postValue(deviceName)
+                return
+            } else {
+                appendLog("Disconnecting device ${connectedDeviceName.value}\n")
+                disconnect()
+            }
         }
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -154,7 +160,7 @@ class TransactionsViewModel @Inject constructor(
                 mpos.connect(deviceName, deviceAddress, object : MPOSConnectionCallback {
                     override fun onSuccess() {
                         appendLog("Device Connected\n")
-                        _deviceName.postValue(deviceName)
+                        _connectedDeviceName.postValue(deviceName)
                         setLoading(false)
                         _isConnected.postValue(true)
                     }
@@ -228,15 +234,11 @@ class TransactionsViewModel @Inject constructor(
     fun destroy() {
         viewModelScope.launch(Dispatchers.IO) {
             val message = try {
-                mpos.let {
-                    if (it.isConnected()) {
-                        it.finishTransaction()
-                        it.disconnect()
-                        _isConnected.postValue(false)
-                        "Device Disconnected"
-                    } else {
-                        "Device Not Connected"
-                    }
+                if (mpos.isConnected()) {
+                    disconnect()
+                    "Device Disconnected"
+                } else {
+                    "Device Not Connected"
                 }
             } catch (e: Exception) {
                 "Error disconnecting device: ${e.message}"
@@ -244,6 +246,13 @@ class TransactionsViewModel @Inject constructor(
 
             appendLog("$message\n")
         }
+    }
+
+    fun disconnect() {
+        mpos.finishTransaction()
+        mpos.disconnect()
+        _isConnected.postValue(false)
+        _connectedDeviceName.postValue("")
     }
 
     private fun appendLog(message: String) {
@@ -263,27 +272,28 @@ class TransactionsViewModel @Inject constructor(
         _transactionStatus.postValue("")
     }
 
-    private fun transactionCallback(transactionType: TransactionType): MPOSTransactionCallback = object : MPOSTransactionCallback {
-        override fun onSuccess(result: TransactionResult?) {
-            result?.id
-                ?.takeIf { it.isNotBlank() }
-                ?.let { appendLog("${transactionName(transactionType)} id: $it\n") }
-            appendLog("✅ Transaction Success \n")
+    private fun transactionCallback(transactionType: TransactionType): MPOSTransactionCallback =
+        object : MPOSTransactionCallback {
+            override fun onSuccess(result: TransactionResult?) {
+                result?.id
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { appendLog("${transactionName(transactionType)} id: $it\n") }
+                appendLog("✅ Transaction Success \n")
 
-            setLoading(false)
-            showStatus(transactionName(transactionType) + " Complete")
-        }
+                setLoading(false)
+                showStatus(transactionName(transactionType) + " Complete")
+            }
 
-        override fun onError(errorMessage: String) {
-            appendLog("❌ Transaction Error -> $errorMessage\n")
-            setLoading(false)
-            showStatus(transactionName(transactionType) + " Failed")
-        }
+            override fun onError(errorMessage: String) {
+                appendLog("❌ Transaction Error -> $errorMessage\n")
+                setLoading(false)
+                showStatus(transactionName(transactionType) + " Failed")
+            }
 
-        override fun onProcessing(currentStepMessage: String) {
-            appendLog("Transaction Status -> $currentStepMessage\n")
+            override fun onProcessing(currentStepMessage: String) {
+                appendLog("Transaction Status -> $currentStepMessage\n")
+            }
         }
-    }
 
     private fun emvCallback(): MPOSEMVProcessingCallback = object : MPOSEMVProcessingCallback {
         override fun onError(errorMessage: String) {

@@ -16,7 +16,7 @@ import javax.inject.Inject
 
 class ConfigPrefs @Inject constructor() {
     companion object {
-        private val PREF_NAME = "merchant_data"
+        private const val PREF_NAME = "merchant_data"
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_MERCHANT_ID = "merchant_id"
         private const val KEY_MERCHANT_MID = "merchant_mid"
@@ -65,20 +65,22 @@ class ConfigPrefs @Inject constructor() {
             currency = Currency.USD
         )
     }
+
     fun loadEnvironments(context: Context): List<EnvEnum> {
         try {
-            val jsonString = context.assets.open(CONFIG_FILE_NAME).bufferedReader().use { it.readText() }
+            val jsonString =
+                context.assets.open(CONFIG_FILE_NAME).bufferedReader().use { it.readText() }
             if (jsonString.isNotBlank()) {
                 val jsonObject = Json.parseToJsonElement(jsonString).jsonObject
                 val envs = jsonObject.keys.mapNotNull { key ->
                     runCatching { EnvEnum.valueOf(key) }.getOrNull()
                 }
-                if(envs.isNotEmpty()) return envs
+                if (envs.isNotEmpty()) return envs
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        
+
         return listOf(EnvEnum.PROD, EnvEnum.SB)
     }
 
@@ -116,7 +118,7 @@ class ConfigPrefs @Inject constructor() {
 
             val validation = ConfigValidator.validateMerchantConfig(merchantData)
 
-            if(validation.isValid) {
+            if (validation.isValid) {
                 saveConfigurations(context, merchantData)
                 Log.d("Configuration Init", "Loaded and saved config for $env: $merchantData")
             } else {
@@ -172,7 +174,7 @@ class ConfigPrefs @Inject constructor() {
         val envName = prefs.getString(KEY_ENVIRONMENT, null)
         return try {
             EnvEnum.valueOf(envName ?: EnvEnum.PROD.name)
-        } catch (e: IllegalArgumentException) {
+        } catch (_: IllegalArgumentException) {
             EnvEnum.PROD
         }
     }
