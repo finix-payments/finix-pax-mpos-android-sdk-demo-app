@@ -124,14 +124,15 @@ fun ConfigurationSheet(
 
             Column {
                 TabRow(
-                    selectedTabIndex = environments.indexOf(selectedEnvironment).takeIf { it >= 0 } ?: 0,
+                    selectedTabIndex = environments.indexOf(selectedEnvironment).takeIf { it >= 0 }
+                        ?: 0,
                     modifier = Modifier
                         .fillMaxWidth(),
                     containerColor = Color.LightGray
                 ) {
-                    environments.forEachIndexed { index, env ->
+                    environments.forEachIndexed { _, env ->
                         Tab(
-                            selected = selectedEnvironment ==  env,
+                            selected = selectedEnvironment == env,
                             onClick = {
                                 selectedEnvironment = env
                                 merchantDataMap = environments.associateWith { env ->

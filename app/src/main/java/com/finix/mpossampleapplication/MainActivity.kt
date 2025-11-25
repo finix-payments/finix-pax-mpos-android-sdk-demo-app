@@ -16,9 +16,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.finix.mpossampleapplication.ui.theme.MPOSSampleApplicationTheme
 import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
 import com.finix.mpossampleapplication.ui.views.MainViews
@@ -26,7 +23,6 @@ import com.finix.mpossampleapplication.ui.views.Progress
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 
 
 @AndroidEntryPoint
@@ -41,16 +37,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestBluetoothPermissions()
 
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                _permissionsGranted.collect { granted ->
-                    if (granted) {
-                        viewModel.initializeDevice(this@MainActivity)
-                    }
-                }
-            }
-        }
-
         setContent {
             MPOSSampleApplicationTheme {
                 Surface(
@@ -62,7 +48,7 @@ class MainActivity : ComponentActivity() {
                     val isConnected by viewModel.isConnected.observeAsState(false)
 
                     MainViews(viewModel = viewModel, permissionsAccepted ?: true, isConnected)
-                    if(isLoading) {
+                    if (isLoading) {
                         Progress(viewModel, isConnected)
                     }
                 }
@@ -85,6 +71,7 @@ class MainActivity : ComponentActivity() {
                     )
                 )
             }
+
             else -> {
                 val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
                 requestEnableBluetooth.launch(enableBtIntent)

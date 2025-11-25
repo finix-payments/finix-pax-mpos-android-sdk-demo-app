@@ -68,6 +68,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.finix.mpos.models.TransactionType
 import com.finix.mpossampleapplication.R
 import com.finix.mpossampleapplication.ui.theme.MPOSSampleApplicationTheme
@@ -90,8 +91,7 @@ fun MainViews(
     var amount by remember { mutableStateOf("3.14") }
     val cardColor = Color.LightGray
 
-    val merchantData by viewModel.merchantData.collectAsState()
-    val currentEnvironment = merchantData.env.displayName
+    val merchantData by viewModel.merchantData.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -104,7 +104,11 @@ fun MainViews(
             )
         }
     ) { innerPadding ->
-        Box(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize()
+        ) {
             Column(
                 modifier = Modifier
                     .padding(horizontal = 15.dp, vertical = 15.dp)
@@ -140,7 +144,7 @@ fun MainViews(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "Selected environment: ${currentEnvironment}", style = TextStyle(
+                        "Selected environment: ${merchantData.env.displayName}", style = TextStyle(
                             fontStyle = FontStyle.Italic
                         )
                     )
@@ -167,7 +171,7 @@ fun MainViews(
                     )
                 }
 
-                if(isConnected) {
+                if (isConnected) {
                     TransactionSection(
                         viewModel,
                         cardColor,
@@ -189,16 +193,17 @@ fun MainViews(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        if(showBottomSheet) {
+        if (showBottomSheet) {
             BluetoothDeviceSheet(
                 viewModel = viewModel,
-                onDismiss = {showBottomSheet = false})
+                onDismiss = { showBottomSheet = false }
+            )
         } else if (configurationSheet) {
             ConfigurationSheet(
                 viewModel = viewModel,
                 onDismiss = { configurationSheet = false }
             )
-        } else if(otherSheet) {
+        } else if (otherSheet) {
             OtherSheet(
                 viewModel = viewModel,
                 onDismiss = { otherSheet = false }
@@ -217,7 +222,7 @@ fun AppBar(
     onOtherSheetChange: (Boolean) -> Unit,
     onMenuExpandedChange: (Boolean) -> Unit
 ) {
-    var showResetConfirmation by remember { mutableStateOf(false)}
+    var showResetConfirmation by remember { mutableStateOf(false) }
 
     TopAppBar(
         title = {
@@ -236,7 +241,8 @@ fun AppBar(
                 expanded = menuExpanded,
                 onDismissRequest = { onMenuExpandedChange(false) }
             ) {
-                val menuItems = listOf("Configurations", "Reset Device", "Send Debug Data", "Others")
+                val menuItems =
+                    listOf("Configurations", "Reset Device", "Send Debug Data", "Others")
                 menuItems.forEach { menuItem ->
                     DropdownMenuItem(
                         onClick =
@@ -246,11 +252,16 @@ fun AppBar(
                                     "Configurations" -> {
                                         onConfigurationSheetChange(true)
                                     }
+
                                     "Others" -> {
                                         onOtherSheetChange(true)
                                     }
-                                    "Reset Device"   -> { showResetConfirmation = true }
-                                    "Send Debug Data"    -> viewModel.sendDebugData()
+
+                                    "Reset Device" -> {
+                                        showResetConfirmation = true
+                                    }
+
+                                    "Send Debug Data" -> viewModel.sendDebugData()
                                 }
                             },
                         text = { Text(menuItem) }
@@ -265,7 +276,7 @@ fun AppBar(
         )
     )
 
-    if(showResetConfirmation) {
+    if (showResetConfirmation) {
         AlertDialog(
             onDismissRequest = { showResetConfirmation = false },
             title = { Text("Reset Device?") },
@@ -299,13 +310,13 @@ fun DeviceSection(
     onDisconnectClick: () -> Unit
 ) {
     Text("DEVICE")
-    if(isConnected) {
+    if (isConnected) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(7.dp))
                 .background(cardColor)
-        ){
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -313,8 +324,10 @@ fun DeviceSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    viewModel.deviceName.value ?: "",
-                    modifier = Modifier.weight(2f).padding(start = 12.dp)
+                    viewModel.connectedDeviceName.value ?: "",
+                    modifier = Modifier
+                        .weight(2f)
+                        .padding(start = 12.dp)
                 )
                 Box(
                     modifier = Modifier
@@ -358,7 +371,7 @@ fun DeviceSection(
 
 @Composable
 fun TransactionSection(
-    viewModel:TransactionsViewModel,
+    viewModel: TransactionsViewModel,
     cardColor: Color,
     amount: String,
     onAmountChange: (String) -> Unit,
@@ -409,7 +422,7 @@ fun TransactionSection(
                     prefix = {
                         Text("$")
                     },
-                    placeholder = {Text("0")},
+                    placeholder = { Text("0") },
                     colors = TextFieldDefaults.colors(
                         focusedIndicatorColor = Color.Transparent,
                         unfocusedIndicatorColor = Color.Transparent,
@@ -446,7 +459,7 @@ fun TransactionSection(
                         "Refund" to TransactionType.REFUND
                     )
 
-                    transactionTypes.forEach {(label, type) ->
+                    transactionTypes.forEach { (label, type) ->
                         Button(
                             modifier = Modifier.weight(1f),
                             onClick =
@@ -472,14 +485,14 @@ fun OtherConfig(viewModel: TransactionsViewModel) {
     val splits by viewModel.splitMerchants.collectAsState()
 
     Column {
-        if(tagValue.isNotEmpty()) {
-            Text("\nTags: " + tagValue)
+        if (tagValue.isNotEmpty()) {
+            Text("\nTags: $tagValue")
         }
 
-        if(splits.isNotEmpty()) {
-            splits.forEachIndexed { inxex, it ->
-                if(it.merchantId.isNotEmpty() && it.amount>0) {
-                    if(inxex == 0) {
+        if (splits.isNotEmpty()) {
+            splits.forEachIndexed { index, it ->
+                if (it.merchantId.isNotEmpty() && it.amount > 0) {
+                    if (index == 0) {
                         Text("Split Merchants:")
                     }
                     val amountFormatted = String.format("$%.2f", it.amount / 100.0)
@@ -508,16 +521,19 @@ fun LogSection(
 
     Spacer(modifier = Modifier.height(20.dp))
 
-    Row(verticalAlignment = Alignment.CenterVertically,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.padding(bottom = 0.dp)
     ) {
         Text("LOGS", modifier = Modifier.weight(1f))
         Text(
             "CLEAR",
-            modifier = Modifier.clickable { onClearLogs() }.padding(end = 2.dp),
+            modifier = Modifier
+                .clickable { onClearLogs() }
+                .padding(end = 2.dp),
             color = if (isSystemInDarkTheme())
                 Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary,
-            )
+        )
     }
 
     Box(
@@ -561,7 +577,9 @@ fun Progress(
             if (isConnected) {
                 Button(
                     onClick = { viewModel.cancelTransaction() },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 25.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 25.dp),
                     shape = RoundedCornerShape(7.dp)
                 ) {
                     Text(
@@ -590,7 +608,7 @@ fun TransactionStatus(
         shape = RoundedCornerShape(7.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Black.copy(alpha = 0.7f),
-            contentColor = if(status.contains("Complete")) Color.Green else Color.Red
+            contentColor = if (status.contains("Complete")) Color.Green else Color.Red
         )
     ) {
         Text(
@@ -604,6 +622,10 @@ fun TransactionStatus(
 @Composable
 fun HomeViewsPreview() {
     MPOSSampleApplicationTheme {
-        MainViews(TransactionsViewModel(context = LocalContext.current, ConfigPrefs()), true, true)
+        MainViews(
+            TransactionsViewModel(context = LocalContext.current, ConfigPrefs()),
+            permissionsAccepted = true,
+            isConnected = true
+        )
     }
 }
