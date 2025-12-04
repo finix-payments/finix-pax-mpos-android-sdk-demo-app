@@ -10,7 +10,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.finix.mpos.models.Currency
 import com.finix.mpos.models.EnvEnum
-import com.finix.mpos.models.LogsResponse
 import com.finix.mpos.models.MerchantData
 import com.finix.mpos.models.SplitTransfer
 import com.finix.mpos.models.TransactionResult
@@ -18,7 +17,6 @@ import com.finix.mpos.models.TransactionType
 import com.finix.mpos.sdk.MPOSConnectionCallback
 import com.finix.mpos.sdk.MPOSEMVProcessingCallback
 import com.finix.mpos.sdk.MPOSFinix
-import com.finix.mpos.sdk.MPOSSendReportCallback
 import com.finix.mpos.sdk.MPOSTransactionCallback
 import com.finix.mpossampleapplication.utils.ConfigPrefs
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -204,18 +202,9 @@ class TransactionsViewModel @Inject constructor(
 
         viewModelScope.launch {
             withContext(Dispatchers.IO) {
-                mpos.sendDebugReport(object : MPOSSendReportCallback {
-                    override fun onError(errorMessage: String?) {
-                        appendLog("Send Debug Data Failed: $errorMessage\n")
-                        setLoading(false)
-                    }
-
-                    override fun onSuccess(result: LogsResponse?) {
-                        appendLog("Send Debug Data Complete\n")
-                        setLoading(false)
-                    }
-
-                })
+                mpos.sendDebugReport()
+                setLoading(false)
+                appendLog("Sent\n")
             }
         }
     }
@@ -233,18 +222,16 @@ class TransactionsViewModel @Inject constructor(
 
     fun destroy() {
         viewModelScope.launch(Dispatchers.IO) {
-            val message = try {
+            try {
                 if (mpos.isConnected()) {
                     disconnect()
-                    "Device Disconnected"
+                    appendLog("Device Disconnected\n")
                 } else {
-                    "Device Not Connected"
+                    appendLog("Device Not Connected\n")
                 }
             } catch (e: Exception) {
-                "Error disconnecting device: ${e.message}"
+                appendLog("Error disconnecting device: ${e.message}\n")
             }
-
-            appendLog("$message\n")
         }
     }
 
