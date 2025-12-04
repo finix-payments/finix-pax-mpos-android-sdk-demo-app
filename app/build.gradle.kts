@@ -80,6 +80,6 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
 
-    implementation("com.finix:pax-mpos-sdk-android:3.3.4")
+    implementation("com.finix:pax-mpos-sdk-android:3.4.0")
 
 }
