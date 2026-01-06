@@ -15,7 +15,6 @@ import com.finix.mpos.models.SplitTransfer
 import com.finix.mpos.models.TransactionResult
 import com.finix.mpos.models.TransactionType
 import com.finix.mpos.sdk.MPOSConnectionCallback
-import com.finix.mpos.sdk.MPOSEMVProcessingCallback
 import com.finix.mpos.sdk.MPOSFinix
 import com.finix.mpos.sdk.MPOSTransactionCallback
 import com.finix.mpossampleapplication.utils.ConfigPrefs
@@ -124,7 +123,6 @@ class TransactionsViewModel @Inject constructor(
                     amountInCents,
                     transactionType,
                     transactionCallback(transactionType),
-                    emvCallback(),
                     _splitMerchants.value.ifEmpty { null },
                     getTagsMap(tags.value)
                 )
@@ -281,16 +279,6 @@ class TransactionsViewModel @Inject constructor(
                 appendLog("Transaction Status -> $currentStepMessage\n")
             }
         }
-
-    private fun emvCallback(): MPOSEMVProcessingCallback = object : MPOSEMVProcessingCallback {
-        override fun onError(errorMessage: String) {
-            appendLog("EMV Processing Error -> $errorMessage\n")
-        }
-
-        override fun onProcessing(currentStepMessage: String) {
-            appendLog("EMV Processing Status -> $currentStepMessage\n")
-        }
-    }
 
     fun loadConfigurations(env: EnvEnum): MerchantData {
         return configPrefs.loadConfigurations(context = context, env)
