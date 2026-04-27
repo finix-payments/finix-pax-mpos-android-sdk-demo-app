@@ -76,12 +76,11 @@ import com.finix.mpossampleapplication.ui.viewModels.TransactionsViewModel
 import com.finix.mpossampleapplication.utils.ConfigPrefs
 import kotlinx.coroutines.delay
 
-
 @Composable
 fun MainViews(
     viewModel: TransactionsViewModel,
     permissionsAccepted: Boolean,
-    isConnected: Boolean
+    isConnected: Boolean,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var showBottomSheet by remember { mutableStateOf(false) }
@@ -89,8 +88,13 @@ fun MainViews(
     var showDisconnectDialog by remember { mutableStateOf(false) }
     var otherSheet by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf("3.14") }
+    var tip by remember { mutableStateOf("0") }
+    var surcharge by remember { mutableStateOf("0") }
+    var isSignatureSheetVisible by remember { mutableStateOf(false) }
+
     val cardColor = Color.LightGray
 
+    val signature by viewModel.currentTransactionSignature.collectAsStateWithLifecycle()
     val merchantData by viewModel.merchantData.collectAsStateWithLifecycle()
 
     Scaffold(
@@ -100,31 +104,33 @@ fun MainViews(
                 menuExpanded,
                 onConfigurationSheetChange = { configurationSheet = it },
                 onOtherSheetChange = { otherSheet = it },
-                onMenuExpandedChange = { menuExpanded = it }
+                onMenuExpandedChange = { menuExpanded = it },
             )
-        }
+        },
     ) { innerPadding ->
         Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
+            modifier =
+                Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize(),
         ) {
             Column(
-                modifier = Modifier
-                    .padding(horizontal = 15.dp, vertical = 15.dp)
-                    .verticalScroll(rememberScrollState())
+                modifier =
+                    Modifier
+                        .padding(horizontal = 15.dp, vertical = 15.dp)
+                        .verticalScroll(rememberScrollState()),
             ) {
-
                 if (!permissionsAccepted) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp)
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
                     ) {
                         Text(
                             text = "Bluetooth permission not granted, cannot select device. Please go to app settings and enable permission",
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -136,17 +142,19 @@ fun MainViews(
                     permissionsAccepted,
                     isConnected,
                     onScanClick = { showBottomSheet = true },
-                    onDisconnectClick = { showDisconnectDialog = true }
+                    onDisconnectClick = { showDisconnectDialog = true },
                 )
 
                 Box(
                     modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.Center
+                    contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        "Selected environment: ${merchantData.env.displayName}", style = TextStyle(
-                            fontStyle = FontStyle.Italic
-                        )
+                        "Selected environment: ${merchantData.env.displayName}",
+                        style =
+                            TextStyle(
+                                fontStyle = FontStyle.Italic,
+                            ),
                     )
                 }
 
@@ -167,7 +175,7 @@ fun MainViews(
                             TextButton(onClick = { showDisconnectDialog = false }) {
                                 Text("Cancel")
                             }
-                        }
+                        },
                     )
                 }
 
@@ -176,17 +184,29 @@ fun MainViews(
                         viewModel,
                         cardColor,
                         amount,
+                        tip = tip,
+                        surcharge = surcharge,
+                        hasSignature = !signature.isNullOrBlank(),
                         onAmountChange = { amount = it },
+                        onTipChange = { tip = it },
+                        onSurchargeChange = { surcharge = it },
                         onTransactionClick = { type ->
-                            viewModel.transact(amount, type)
-                        }
+                            viewModel.transact(
+                                amount = amount,
+                                tip = tip,
+                                surcharge = surcharge,
+                                transactionType = type,
+                                signature = signature,
+                            )
+                        },
+                        onSignatureClick = { isSignatureSheetVisible = !isSignatureSheetVisible },
                     )
                 }
 
                 LogSection(
                     cardColor,
                     logs = viewModel.logText,
-                    onClearLogs = { viewModel.clearLogs() }
+                    onClearLogs = { viewModel.clearLogs() },
                 )
             }
         }
@@ -196,19 +216,26 @@ fun MainViews(
         if (showBottomSheet) {
             BluetoothDeviceSheet(
                 viewModel = viewModel,
-                onDismiss = { showBottomSheet = false }
+                onDismiss = { showBottomSheet = false },
             )
         } else if (configurationSheet) {
             ConfigurationSheet(
                 viewModel = viewModel,
-                onDismiss = { configurationSheet = false }
+                onDismiss = { configurationSheet = false },
             )
         } else if (otherSheet) {
             OtherSheet(
                 viewModel = viewModel,
-                onDismiss = { otherSheet = false }
+                onDismiss = { otherSheet = false },
             )
-
+        } else if (isSignatureSheetVisible) {
+            SignatureBottomSheet(
+                onConfirm = {
+                    viewModel.setSignature(it)
+                    isSignatureSheetVisible = false
+                },
+                onDismiss = { isSignatureSheetVisible = false },
+            )
         }
     }
 }
@@ -220,7 +247,7 @@ fun AppBar(
     menuExpanded: Boolean,
     onConfigurationSheetChange: (Boolean) -> Unit,
     onOtherSheetChange: (Boolean) -> Unit,
-    onMenuExpandedChange: (Boolean) -> Unit
+    onMenuExpandedChange: (Boolean) -> Unit,
 ) {
     var showResetConfirmation by remember { mutableStateOf(false) }
 
@@ -228,7 +255,7 @@ fun AppBar(
         title = {
             Box(
                 modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.Center,
             ) {
                 Text("Finix + PAX D135")
             }
@@ -239,7 +266,7 @@ fun AppBar(
             }
             DropdownMenu(
                 expanded = menuExpanded,
-                onDismissRequest = { onMenuExpandedChange(false) }
+                onDismissRequest = { onMenuExpandedChange(false) },
             ) {
                 val menuItems =
                     listOf("Configurations", "Reset Device", "Send Debug Data", "Others")
@@ -264,16 +291,17 @@ fun AppBar(
                                     "Send Debug Data" -> viewModel.sendDebugData()
                                 }
                             },
-                        text = { Text(menuItem) }
+                        text = { Text(menuItem) },
                     )
                 }
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            titleContentColor = Color.White,
-            actionIconContentColor = Color.White
-        )
+        colors =
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                titleContentColor = Color.White,
+                actionIconContentColor = Color.White,
+            ),
     )
 
     if (showResetConfirmation) {
@@ -286,7 +314,7 @@ fun AppBar(
                     onClick = {
                         viewModel.resetDevice()
                         showResetConfirmation = false
-                    }
+                    },
                 ) {
                     Text("Reset")
                 }
@@ -295,7 +323,7 @@ fun AppBar(
                 TextButton(onClick = { showResetConfirmation = false }) {
                     Text("Cancel")
                 }
-            }
+            },
         )
     }
 }
@@ -307,38 +335,42 @@ fun DeviceSection(
     permissionsAccepted: Boolean,
     isConnected: Boolean,
     onScanClick: () -> Unit,
-    onDisconnectClick: () -> Unit
+    onDisconnectClick: () -> Unit,
 ) {
     Text("DEVICE")
     if (isConnected) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(7.dp))
-                .background(cardColor)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(cardColor),
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     viewModel.connectedDeviceName.value ?: "",
-                    modifier = Modifier
-                        .weight(2f)
-                        .padding(start = 12.dp)
+                    modifier =
+                        Modifier
+                            .weight(2f)
+                            .padding(start = 12.dp),
                 )
                 Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(.5.dp)
-                        .background(Color.Gray)
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .width(.5.dp)
+                            .background(Color.Gray),
                 )
                 TextButton(
                     onClick = onDisconnectClick,
                     modifier = Modifier.weight(1f),
-                    shape = RectangleShape
+                    shape = RectangleShape,
                 ) {
                     Text("Disconnect")
                 }
@@ -346,22 +378,25 @@ fun DeviceSection(
         }
     } else {
         Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(7.dp))
-                .background(cardColor)
-                .padding(12.dp)
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(cardColor)
+                    .padding(12.dp),
         ) {
             Button(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(45.dp),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(45.dp),
                 shape = RoundedCornerShape(7.dp),
                 onClick = onScanClick,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = colorResource(R.color.light_blue),
-                    contentColor = Color.White
-                ),
-                enabled = permissionsAccepted
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = colorResource(R.color.light_blue),
+                        contentColor = Color.White,
+                    ),
+                enabled = permissionsAccepted,
             ) {
                 Text("Scan for device")
             }
@@ -374,68 +409,61 @@ fun TransactionSection(
     viewModel: TransactionsViewModel,
     cardColor: Color,
     amount: String,
+    tip: String,
+    surcharge: String,
+    hasSignature: Boolean,
     onAmountChange: (String) -> Unit,
-    onTransactionClick: (TransactionType) -> Unit
+    onTipChange: (String) -> Unit,
+    onSurchargeChange: (String) -> Unit,
+    onTransactionClick: (TransactionType) -> Unit,
+    onSignatureClick: () -> Unit,
 ) {
     val transactionStatus by viewModel.transactionStatus.observeAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
-
-    fun filterAmountInput(input: String): String {
-        val regex = Regex("^\\d*(\\.\\d{0,2})?$")
-        return if (regex.matches(input)) input else amount
-    }
 
     Spacer(modifier = Modifier.height(18.dp))
     Text("TRANSACTION")
 
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(7.dp))
-            .background(cardColor)
-            .fillMaxWidth()
-            .padding(5.dp)
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(7.dp))
+                .background(cardColor)
+                .fillMaxWidth()
+                .padding(5.dp),
     ) {
         Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            AmountField(
+                label = "Amount:",
+                value = amount,
+                onValueChange = onAmountChange,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            AmountField(
+                label = "Tip:",
+                value = tip,
+                onValueChange = onTipChange,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            AmountField(
+                label = "Surcharge:",
+                value = surcharge,
+                onValueChange = onSurchargeChange,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            Button(
+                onClick = onSignatureClick,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(start = 5.dp, end = 5.dp, bottom = 8.dp),
+                shape = RoundedCornerShape(8.dp),
             ) {
                 Text(
-                    text = "Amount:",
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-
-                TextField(
-                    value = amount,
-                    onValueChange =
-                        {
-                            val filtered = filterAmountInput(it)
-                            onAmountChange(filtered)
-                        },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 42.dp)
-                        .border(1.dp, Color.Gray, RectangleShape),
-                    singleLine = true,
-                    prefix = {
-                        Text("$")
-                    },
-                    placeholder = { Text("0") },
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        errorIndicatorColor = Color.Transparent,
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        disabledContainerColor = Color.Transparent
-                    ),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Done
-                    )
+                    text = if (hasSignature) "Replace Signature" else "Add Signature",
                 )
             }
 
@@ -443,21 +471,21 @@ fun TransactionSection(
 
             Row(
                 modifier = Modifier.padding(5.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-
                 transactionStatus?.takeIf { it.isNotBlank() }?.let {
                     TransactionStatus(
                         Modifier.weight(1f),
                         viewModel,
-                        it
+                        it,
                     )
                 } ?: run {
-                    val transactionTypes: List<Pair<String, TransactionType>> = listOf(
-                        "Sale" to TransactionType.SALE,
-                        "Auth" to TransactionType.AUTHORIZATION,
-                        "Refund" to TransactionType.REFUND
-                    )
+                    val transactionTypes: List<Pair<String, TransactionType>> =
+                        listOf(
+                            "Sale" to TransactionType.SALE,
+                            "Auth" to TransactionType.AUTHORIZATION,
+                            "Refund" to TransactionType.REFUND,
+                        )
 
                     transactionTypes.forEach { (label, type) ->
                         Button(
@@ -467,7 +495,7 @@ fun TransactionSection(
                                     keyboardController?.hide()
                                     onTransactionClick(type)
                                 },
-                            shape = RoundedCornerShape(7.dp)
+                            shape = RoundedCornerShape(7.dp),
                         ) {
                             Text(label)
                         }
@@ -496,9 +524,10 @@ fun OtherConfig(viewModel: TransactionsViewModel) {
                         Text("Split Merchants:")
                     }
                     val amountFormatted = String.format("$%.2f", it.amount / 100.0)
-                    val feeFormatted = it.fee?.takeIf { it > 0 }?.let { fee ->
-                        ", Fee: ${String.format("$%.2f", fee / 100.0)}"
-                    } ?: ""
+                    val feeFormatted =
+                        it.fee?.takeIf { it > 0 }?.let { fee ->
+                            ", Fee: ${String.format("$%.2f", fee / 100.0)}"
+                        } ?: ""
 
                     Text("Merchant: ${it.merchantId}, Amount: $amountFormatted$feeFormatted")
                 }
@@ -511,9 +540,8 @@ fun OtherConfig(viewModel: TransactionsViewModel) {
 fun LogSection(
     cardColor: Color,
     logs: String,
-    onClearLogs: () -> Unit
+    onClearLogs: () -> Unit,
 ) {
-
     val scrollState = rememberScrollState()
     LaunchedEffect(logs) {
         scrollState.animateScrollTo(scrollState.maxValue)
@@ -523,34 +551,41 @@ fun LogSection(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(bottom = 0.dp)
+        modifier = Modifier.padding(bottom = 0.dp),
     ) {
         Text("LOGS", modifier = Modifier.weight(1f))
         Text(
             "CLEAR",
-            modifier = Modifier
-                .clickable { onClearLogs() }
-                .padding(end = 2.dp),
-            color = if (isSystemInDarkTheme())
-                Color(0xFF90CAF9) else MaterialTheme.colorScheme.primary,
+            modifier =
+                Modifier
+                    .clickable { onClearLogs() }
+                    .padding(end = 2.dp),
+            color =
+                if (isSystemInDarkTheme()) {
+                    Color(0xFF90CAF9)
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
         )
     }
 
     Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(7.dp))
-            .background(cardColor)
-            .fillMaxWidth()
-            .height(300.dp)
-            .padding(bottom = 0.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(7.dp))
+                .background(cardColor)
+                .fillMaxWidth()
+                .height(300.dp)
+                .padding(bottom = 0.dp),
     ) {
         SelectionContainer {
             Text(
                 text = logs,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-                    .verticalScroll(scrollState)
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(12.dp)
+                        .verticalScroll(scrollState),
             )
         }
     }
@@ -559,31 +594,33 @@ fun LogSection(
 @Composable
 fun Progress(
     viewModel: TransactionsViewModel,
-    isConnected: Boolean
+    isConnected: Boolean,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0x80000000))
-            .pointerInput(Unit) {
-                detectTapGestures { }
-            },
-        contentAlignment = Alignment.Center
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(Color(0x80000000))
+                .pointerInput(Unit) {
+                    detectTapGestures { }
+                },
+        contentAlignment = Alignment.Center,
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             CircularProgressIndicator()
             if (isConnected) {
                 Button(
                     onClick = { viewModel.cancelTransaction() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 25.dp),
-                    shape = RoundedCornerShape(7.dp)
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 25.dp),
+                    shape = RoundedCornerShape(7.dp),
                 ) {
                     Text(
-                        text = "Cancel"
+                        text = "Cancel",
                     )
                 }
             }
@@ -593,9 +630,9 @@ fun Progress(
 
 @Composable
 fun TransactionStatus(
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
     viewModel: TransactionsViewModel,
-    status: String
+    status: String,
 ) {
     LaunchedEffect(Unit) {
         delay(2000)
@@ -606,13 +643,73 @@ fun TransactionStatus(
         modifier = modifier,
         onClick = { viewModel.endStatus() },
         shape = RoundedCornerShape(7.dp),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color.Black.copy(alpha = 0.7f),
-            contentColor = if (status.contains("Complete")) Color.Green else Color.Red
-        )
+        colors =
+            ButtonDefaults.buttonColors(
+                containerColor = Color.Black.copy(alpha = 0.7f),
+                contentColor = if (status.contains("Complete")) Color.Green else Color.Red,
+            ),
     ) {
         Text(
-            text = status
+            text = status,
+        )
+    }
+}
+
+@Composable
+private fun AmountField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    fun filterAmountInput(input: String): String {
+        val regex = Regex("^\\d*(\\.\\d{0,2})?$")
+        return if (regex.matches(input)) input else value
+    }
+
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+
+        TextField(
+            value = value,
+            onValueChange = {
+                val filtered = filterAmountInput(it)
+                onValueChange(filtered)
+            },
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 42.dp)
+                    .border(1.dp, Color.Gray, RectangleShape),
+            singleLine = true,
+            prefix = {
+                Text("$")
+            },
+            placeholder = { Text("0") },
+            colors =
+                TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    errorIndicatorColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                ),
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
         )
     }
 }
@@ -620,12 +717,8 @@ fun TransactionStatus(
 @Preview(showBackground = true)
 @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
 @Composable
-fun HomeViewsPreview() {
+private fun HomeViewsPreview() {
     MPOSSampleApplicationTheme {
-        MainViews(
-            TransactionsViewModel(context = LocalContext.current, ConfigPrefs()),
-            permissionsAccepted = true,
-            isConnected = true
-        )
+        MainViews(TransactionsViewModel(context = LocalContext.current, ConfigPrefs()), true, true)
     }
 }

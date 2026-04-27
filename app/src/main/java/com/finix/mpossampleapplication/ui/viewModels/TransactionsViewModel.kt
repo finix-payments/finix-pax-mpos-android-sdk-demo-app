@@ -15,6 +15,7 @@ import com.finix.mpos.models.SplitTransfer
 import com.finix.mpos.models.TransactionResult
 import com.finix.mpos.models.TransactionType
 import com.finix.mpos.sdk.MPOSConnectionCallback
+import com.finix.mpos.sdk.MPOSEMVProcessingCallback
 import com.finix.mpos.sdk.MPOSFinix
 import com.finix.mpos.sdk.MPOSTransactionCallback
 import com.finix.mpossampleapplication.utils.ConfigPrefs
@@ -33,9 +34,11 @@ import java.util.Locale
 import javax.inject.Inject
 
 @HiltViewModel
-class TransactionsViewModel @Inject constructor(
+class TransactionsViewModel
+@Inject
+constructor(
     @ApplicationContext private val context: Context,
-    private val configPrefs: ConfigPrefs
+    private val configPrefs: ConfigPrefs,
 ) : ViewModel() {
     private lateinit var mpos: MPOSFinix
 
@@ -51,20 +54,25 @@ class TransactionsViewModel @Inject constructor(
     private val _isConnected = MutableLiveData(false)
     val isConnected: LiveData<Boolean> = _isConnected
 
+    private val mutableCurrentTransactionSignature =
+        MutableStateFlow<String?>(null)
+    val currentTransactionSignature = mutableCurrentTransactionSignature.asStateFlow()
+
     var logText by mutableStateOf("")
         private set
 
-    private val _merchantData = MutableStateFlow(
-        MerchantData(
-            env = EnvEnum.PROD,
-            merchantId = "",
-            mid = "",
-            deviceId = "",
-            currency = Currency.USD,
-            userId = "",
-            password = ""
+    private val _merchantData =
+        MutableStateFlow(
+            MerchantData(
+                env = EnvEnum.PROD,
+                merchantId = "",
+                mid = "",
+                deviceId = "",
+                currency = Currency.USD,
+                userId = "",
+                password = "",
+            ),
         )
-    )
 
     val merchantData: StateFlow<MerchantData> = _merchantData.asStateFlow()
 
@@ -111,30 +119,47 @@ class TransactionsViewModel @Inject constructor(
         configPrefs.clearSplitMerchants(context, merchantData.value.env)
     }
 
-    fun transact(amount: String, transactionType: TransactionType) {
+    fun transact(
+        amount: String,
+        tip: String,
+        surcharge: String,
+        transactionType: TransactionType,
+        signature: String? = null,
+    ) {
+        mutableCurrentTransactionSignature.value = signature
+
         appendLog("\nStart New Transaction\n")
         setLoading(true)
 
         viewModelScope.launch(Dispatchers.IO) {
-            kotlin.runCatching {
-                val amountInCents = (amount.toDouble() * 100).toLong()
+            kotlin
+                .runCatching {
+                    val amountInCents = (amount.toDouble() * 100).toLong()
+                    val tipInCents = (tip.toDouble() * 100).toLong()
+                    val surchargeInCents = (surcharge.toDouble() * 100).toLong()
 
-                mpos.startTransaction(
-                    amountInCents,
-                    transactionType,
-                    transactionCallback(transactionType),
-                    _splitMerchants.value.ifEmpty { null },
-                    getTagsMap(tags.value)
-                )
-            }.onFailure {
-                appendLog("Transaction Error -> ${it.message}\n")
-                setLoading(false)
-                showStatus("$transactionType Failed!")
-            }
+                    mpos.startTransaction(
+                        amountInCents,
+                        transactionType,
+                        transactionCallback(transactionType),
+                        emvCallback(),
+                        _splitMerchants.value.ifEmpty { null },
+                        getTagsMap(tags.value),
+                        surcharge = surchargeInCents,
+                        tipAmount = tipInCents,
+                    )
+                }.onFailure {
+                    appendLog("Transaction Error -> ${it.message}\n")
+                    setLoading(false)
+                    showStatus("$transactionType Failed!")
+                }
         }
     }
 
-    fun connectToTheDevice(deviceName: String, deviceAddress: String) {
+    fun connectToTheDevice(
+        deviceName: String,
+        deviceAddress: String,
+    ) {
         setLoading(true)
         appendLog("\nStart Connection to Device\n")
 
@@ -153,24 +178,28 @@ class TransactionsViewModel @Inject constructor(
 
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                mpos.connect(deviceName, deviceAddress, object : MPOSConnectionCallback {
-                    override fun onSuccess() {
-                        appendLog("Device Connected\n")
-                        _connectedDeviceName.postValue(deviceName)
-                        setLoading(false)
-                        _isConnected.postValue(true)
-                    }
+                mpos.connect(
+                    deviceName,
+                    deviceAddress,
+                    object : MPOSConnectionCallback {
+                        override fun onSuccess() {
+                            appendLog("Device Connected\n")
+                            _connectedDeviceName.postValue(deviceName)
+                            setLoading(false)
+                            _isConnected.postValue(true)
+                        }
 
-                    override fun onError(errorMessage: String) {
-                        appendLog("Device Connection Error: $errorMessage\n")
-                        setLoading(false)
-                        _isConnected.postValue(false)
-                    }
+                        override fun onError(errorMessage: String) {
+                            appendLog("Device Connection Error: $errorMessage\n")
+                            setLoading(false)
+                            _isConnected.postValue(false)
+                        }
 
-                    override fun onProcessing(currentStepMessage: String) {
-                        appendLog("Device Connecting: $currentStepMessage\n")
-                    }
-                })
+                        override fun onProcessing(currentStepMessage: String) {
+                            appendLog("Device Connecting: $currentStepMessage\n")
+                        }
+                    },
+                )
             }.onFailure {
                 appendLog("Device Failed to Connect: ${it.message}\n")
                 _isConnected.postValue(false)
@@ -185,7 +214,19 @@ class TransactionsViewModel @Inject constructor(
             appendLog("Reset Device\n")
 
             withContext(Dispatchers.IO) {
-                mpos.resetDevice()
+                mpos.resetDevice(
+                    object : MPOSConnectionCallback {
+                        override fun onSuccess() {}
+
+                        override fun onError(errorMessage: String) {
+                            appendLog("Reset Device Error: $errorMessage\n")
+                        }
+
+                        override fun onProcessing(currentStepMessage: String) {
+                            appendLog("Device resetting: $currentStepMessage\n")
+                        }
+                    },
+                )
             }
 
             appendLog("Reset Device Complete\n")
@@ -209,6 +250,7 @@ class TransactionsViewModel @Inject constructor(
 
     fun cancelTransaction() {
         viewModelScope.launch(Dispatchers.IO) {
+            mutableCurrentTransactionSignature.value = null
             logText += "Cancel Transaction \n"
             mpos.cancelTransaction()
         }
@@ -260,16 +302,29 @@ class TransactionsViewModel @Inject constructor(
     private fun transactionCallback(transactionType: TransactionType): MPOSTransactionCallback =
         object : MPOSTransactionCallback {
             override fun onSuccess(result: TransactionResult?) {
-                result?.id
+                result
+                    ?.id
                     ?.takeIf { it.isNotBlank() }
                     ?.let { appendLog("${transactionName(transactionType)} id: $it\n") }
                 appendLog("✅ Transaction Success \n")
 
+                result?.traceId?.let { traceId ->
+                    val signature = mutableCurrentTransactionSignature.value
+                    if (!signature.isNullOrBlank()) {
+                        appendLog("Uploading signature \n")
+                        mpos.uploadSignature(
+                            pngEncodedBase64 = signature,
+                            traceId = traceId,
+                        )
+                    }
+                }
+                mutableCurrentTransactionSignature.value = null
                 setLoading(false)
                 showStatus(transactionName(transactionType) + " Complete")
             }
 
             override fun onError(errorMessage: String) {
+                mutableCurrentTransactionSignature.value = null
                 appendLog("❌ Transaction Error -> $errorMessage\n")
                 setLoading(false)
                 showStatus(transactionName(transactionType) + " Failed")
@@ -280,42 +335,52 @@ class TransactionsViewModel @Inject constructor(
             }
         }
 
-    fun loadConfigurations(env: EnvEnum): MerchantData {
-        return configPrefs.loadConfigurations(context = context, env)
-    }
+    private fun emvCallback(): MPOSEMVProcessingCallback =
+        object : MPOSEMVProcessingCallback {
+            override fun onError(errorMessage: String) {
+                appendLog("EMV Processing Error -> $errorMessage\n")
+            }
 
-    fun loadEnvironments(): List<EnvEnum> {
-        return configPrefs.loadEnvironments(context)
-    }
+            override fun onProcessing(currentStepMessage: String) {
+                appendLog("EMV Processing Status -> $currentStepMessage\n")
+            }
+        }
 
-    fun transactionName(transactionType: TransactionType): String = when (transactionType) {
-        TransactionType.SALE -> "Sale"
-        TransactionType.AUTHORIZATION -> "Authorization"
-        TransactionType.REFUND -> "Refund"
-    }
+    fun loadConfigurations(env: EnvEnum): MerchantData = configPrefs.loadConfigurations(context = context, env)
 
-    fun getTagsMap(inputTag: String): Map<String, String>? {
-        return inputTag
+    fun loadEnvironments(): List<EnvEnum> = configPrefs.loadEnvironments(context)
+
+    fun transactionName(transactionType: TransactionType): String =
+        when (transactionType) {
+            TransactionType.SALE -> "Sale"
+            TransactionType.AUTHORIZATION -> "Authorization"
+            TransactionType.REFUND -> "Refund"
+        }
+
+    fun getTagsMap(inputTag: String): Map<String, String>? =
+        inputTag
             .takeIf { it.isNotBlank() && isValidKeyValueFormat(it) }
             ?.split(",")
-            ?.map { it.trim() }?.associate {
+            ?.map { it.trim() }
+            ?.associate {
                 val (key, value) = it.split(":").map(String::trim)
                 key to value
             }
-    }
 
-    fun isValidKeyValueFormat(input: String): Boolean {
-        return input.split(",").all {
+    fun isValidKeyValueFormat(input: String): Boolean =
+        input.split(",").all {
             it.contains(":") && it.split(":").size == 2
         }
+
+    fun setSignature(signature: String) {
+        mutableCurrentTransactionSignature.value = signature
     }
 }
 
-fun isValidKeyValueFormat(input: String): Boolean {
-    return input.split(",").all {
+fun isValidKeyValueFormat(input: String): Boolean =
+    input.split(",").all {
         it.contains(":") && it.split(":").size == 2
     }
-}
 
 fun MerchantData.copyWith(
     deviceId: String = this.deviceId,
@@ -323,14 +388,13 @@ fun MerchantData.copyWith(
     mid: String = this.mid,
     userId: String = this.userId,
     password: String = this.password,
-    env: EnvEnum = this.env
-): MerchantData {
-    return MerchantData(
+    env: EnvEnum = this.env,
+): MerchantData =
+    MerchantData(
         deviceId = deviceId,
         merchantId = merchantId,
         mid = mid,
         userId = userId,
         password = password,
-        env = env
+        env = env,
     )
-}
