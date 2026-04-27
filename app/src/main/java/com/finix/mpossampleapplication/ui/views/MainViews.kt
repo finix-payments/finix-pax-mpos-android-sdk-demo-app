@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -69,6 +70,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.finix.mpos.models.PromptForSignature
 import com.finix.mpos.models.TransactionType
 import com.finix.mpossampleapplication.R
 import com.finix.mpossampleapplication.ui.theme.MPOSSampleApplicationTheme
@@ -90,11 +92,10 @@ fun MainViews(
     var amount by remember { mutableStateOf("3.14") }
     var tip by remember { mutableStateOf("0") }
     var surcharge by remember { mutableStateOf("0") }
-    var isSignatureSheetVisible by remember { mutableStateOf(false) }
 
     val cardColor = Color.LightGray
 
-    val signature by viewModel.currentTransactionSignature.collectAsStateWithLifecycle()
+    val isSignatureSheetVisible by viewModel.isSignatureSheetVisible.collectAsStateWithLifecycle()
     val merchantData by viewModel.merchantData.collectAsStateWithLifecycle()
 
     Scaffold(
@@ -186,20 +187,18 @@ fun MainViews(
                         amount,
                         tip = tip,
                         surcharge = surcharge,
-                        hasSignature = !signature.isNullOrBlank(),
                         onAmountChange = { amount = it },
                         onTipChange = { tip = it },
                         onSurchargeChange = { surcharge = it },
-                        onTransactionClick = { type ->
+                        onTransactionClick = { type, prompt ->
                             viewModel.transact(
                                 amount = amount,
                                 tip = tip,
                                 surcharge = surcharge,
                                 transactionType = type,
-                                signature = signature,
+                                promptForSignature = prompt,
                             )
                         },
-                        onSignatureClick = { isSignatureSheetVisible = !isSignatureSheetVisible },
                     )
                 }
 
@@ -230,11 +229,8 @@ fun MainViews(
             )
         } else if (isSignatureSheetVisible) {
             SignatureBottomSheet(
-                onConfirm = {
-                    viewModel.setSignature(it)
-                    isSignatureSheetVisible = false
-                },
-                onDismiss = { isSignatureSheetVisible = false },
+                onConfirm = { viewModel.setSignature(it) },
+                onDismiss = { viewModel.dismissSignatureBottomSheet() },
             )
         }
     }
@@ -411,15 +407,14 @@ fun TransactionSection(
     amount: String,
     tip: String,
     surcharge: String,
-    hasSignature: Boolean,
     onAmountChange: (String) -> Unit,
     onTipChange: (String) -> Unit,
     onSurchargeChange: (String) -> Unit,
-    onTransactionClick: (TransactionType) -> Unit,
-    onSignatureClick: () -> Unit,
+    onTransactionClick: (TransactionType, PromptForSignature) -> Unit,
 ) {
     val transactionStatus by viewModel.transactionStatus.observeAsState()
     val keyboardController = LocalSoftwareKeyboardController.current
+    var promptForSignature by remember { mutableStateOf(true) }
 
     Spacer(modifier = Modifier.height(18.dp))
     Text("TRANSACTION")
@@ -454,20 +449,19 @@ fun TransactionSection(
                 modifier = Modifier.padding(bottom = 8.dp),
             )
 
-            Button(
-                onClick = onSignatureClick,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 5.dp, end = 5.dp, bottom = 8.dp),
-                shape = RoundedCornerShape(8.dp),
-            ) {
-                Text(
-                    text = if (hasSignature) "Replace Signature" else "Add Signature",
-                )
-            }
-
             OtherConfig(viewModel)
+
+            Row(
+                modifier = Modifier.padding(bottom = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(
+                    checked = promptForSignature,
+                    onCheckedChange = { promptForSignature = it },
+                    modifier = Modifier.padding(end = 4.dp),
+                )
+                Text("Prompt for Signature?")
+            }
 
             Row(
                 modifier = Modifier.padding(5.dp),
@@ -493,7 +487,10 @@ fun TransactionSection(
                             onClick =
                                 {
                                     keyboardController?.hide()
-                                    onTransactionClick(type)
+                                    onTransactionClick(
+                                        type,
+                                        if (promptForSignature) PromptForSignature.Always else PromptForSignature.Never,
+                                    )
                                 },
                             shape = RoundedCornerShape(7.dp),
                         ) {

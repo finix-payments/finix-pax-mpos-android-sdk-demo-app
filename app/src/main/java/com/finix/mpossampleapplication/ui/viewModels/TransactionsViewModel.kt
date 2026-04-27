@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.finix.mpos.models.Currency
 import com.finix.mpos.models.EnvEnum
 import com.finix.mpos.models.MerchantData
+import com.finix.mpos.models.PromptForSignature
 import com.finix.mpos.models.SplitTransfer
 import com.finix.mpos.models.TransactionResult
 import com.finix.mpos.models.TransactionType
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -54,9 +56,10 @@ constructor(
     private val _isConnected = MutableLiveData(false)
     val isConnected: LiveData<Boolean> = _isConnected
 
-    private val mutableCurrentTransactionSignature =
-        MutableStateFlow<String?>(null)
-    val currentTransactionSignature = mutableCurrentTransactionSignature.asStateFlow()
+    private val _isSignatureSheetVisible = MutableStateFlow(false)
+    val isSignatureSheetVisible = _isSignatureSheetVisible.asStateFlow()
+
+    private var pendingSignatureTraceId: String? = null
 
     var logText by mutableStateOf("")
         private set
@@ -124,10 +127,8 @@ constructor(
         tip: String,
         surcharge: String,
         transactionType: TransactionType,
-        signature: String? = null,
+        promptForSignature: PromptForSignature,
     ) {
-        mutableCurrentTransactionSignature.value = signature
-
         appendLog("\nStart New Transaction\n")
         setLoading(true)
 
@@ -147,6 +148,7 @@ constructor(
                         getTagsMap(tags.value),
                         surcharge = surchargeInCents,
                         tipAmount = tipInCents,
+                        promptForSignature = promptForSignature,
                     )
                 }.onFailure {
                     appendLog("Transaction Error -> ${it.message}\n")
@@ -250,7 +252,6 @@ constructor(
 
     fun cancelTransaction() {
         viewModelScope.launch(Dispatchers.IO) {
-            mutableCurrentTransactionSignature.value = null
             logText += "Cancel Transaction \n"
             mpos.cancelTransaction()
         }
@@ -299,6 +300,32 @@ constructor(
         _transactionStatus.postValue("")
     }
 
+    fun setSignature(pngEncodedBase64: String) {
+        val traceId = pendingSignatureTraceId
+        if (traceId == null) {
+            appendLog("Error - No transaction ID saved \n")
+            return
+        }
+        if (pngEncodedBase64.isBlank()) {
+            appendLog("Error - empty signature not uploaded \n")
+            return
+        }
+
+        appendLog("Uploading signature \n")
+        mpos.uploadSignature(
+            pngEncodedBase64 = pngEncodedBase64,
+            traceId = traceId,
+        )
+
+        pendingSignatureTraceId = null
+        _isSignatureSheetVisible.update { false }
+    }
+
+    fun dismissSignatureBottomSheet() {
+        pendingSignatureTraceId = null
+        _isSignatureSheetVisible.update { false }
+    }
+
     private fun transactionCallback(transactionType: TransactionType): MPOSTransactionCallback =
         object : MPOSTransactionCallback {
             override fun onSuccess(result: TransactionResult?) {
@@ -308,23 +335,15 @@ constructor(
                     ?.let { appendLog("${transactionName(transactionType)} id: $it\n") }
                 appendLog("✅ Transaction Success \n")
 
-                result?.traceId?.let { traceId ->
-                    val signature = mutableCurrentTransactionSignature.value
-                    if (!signature.isNullOrBlank()) {
-                        appendLog("Uploading signature \n")
-                        mpos.uploadSignature(
-                            pngEncodedBase64 = signature,
-                            traceId = traceId,
-                        )
-                    }
+                if (result?.traceId != null && result.signaturePending == true) {
+                    pendingSignatureTraceId = result.traceId
+                    _isSignatureSheetVisible.update { true }
                 }
-                mutableCurrentTransactionSignature.value = null
                 setLoading(false)
                 showStatus(transactionName(transactionType) + " Complete")
             }
 
             override fun onError(errorMessage: String) {
-                mutableCurrentTransactionSignature.value = null
                 appendLog("❌ Transaction Error -> $errorMessage\n")
                 setLoading(false)
                 showStatus(transactionName(transactionType) + " Failed")
@@ -371,10 +390,6 @@ constructor(
         input.split(",").all {
             it.contains(":") && it.split(":").size == 2
         }
-
-    fun setSignature(signature: String) {
-        mutableCurrentTransactionSignature.value = signature
-    }
 }
 
 fun isValidKeyValueFormat(input: String): Boolean =

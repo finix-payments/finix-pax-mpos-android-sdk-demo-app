@@ -28,10 +28,6 @@ import androidx.compose.ui.unit.dp
 import com.finix.mpossampleapplication.utils.drawOnCanvasAndGetBase64
 import com.finix.mpossampleapplication.utils.getHorizontalPath
 import com.finix.mpossampleapplication.utils.getPath
-import kotlin.collections.any
-import kotlin.collections.firstOrNull
-import kotlin.collections.isNotEmpty
-import kotlin.ranges.coerceIn
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,14 +70,8 @@ fun SignatureBottomSheet(
                                     if (change.pressed) {
                                         path.add(
                                             Pair(
-                                                change.position.x.coerceIn(
-                                                    0f,
-                                                    size.width.toFloat()
-                                                ),
-                                                change.position.y.coerceIn(
-                                                    0f,
-                                                    size.height.toFloat()
-                                                ),
+                                                change.position.x.coerceIn(0f, size.width.toFloat()),
+                                                change.position.y.coerceIn(0f, size.height.toFloat()),
                                             ),
                                         )
                                     } else {
@@ -121,7 +111,7 @@ fun SignatureBottomSheet(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "Save",
+                    text = "Submit",
                 )
             }
             Button(
