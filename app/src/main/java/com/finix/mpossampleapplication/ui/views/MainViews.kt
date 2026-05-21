@@ -92,6 +92,7 @@ fun MainViews(
     var amount by remember { mutableStateOf("3.14") }
     var tip by remember { mutableStateOf("0") }
     var surcharge by remember { mutableStateOf("0") }
+    var idempotencyId by remember { mutableStateOf("") }
 
     val cardColor = Color.LightGray
 
@@ -187,9 +188,11 @@ fun MainViews(
                         amount,
                         tip = tip,
                         surcharge = surcharge,
+                        idempotencyId = idempotencyId,
                         onAmountChange = { amount = it },
                         onTipChange = { tip = it },
                         onSurchargeChange = { surcharge = it },
+                        onIdempotencyIdChange = { idempotencyId = it },
                         onTransactionClick = { type, prompt ->
                             viewModel.transact(
                                 amount = amount,
@@ -197,6 +200,7 @@ fun MainViews(
                                 surcharge = surcharge,
                                 transactionType = type,
                                 promptForSignature = prompt,
+                                idempotencyId = idempotencyId.ifBlank { null },
                             )
                         },
                     )
@@ -407,9 +411,11 @@ fun TransactionSection(
     amount: String,
     tip: String,
     surcharge: String,
+    idempotencyId: String,
     onAmountChange: (String) -> Unit,
     onTipChange: (String) -> Unit,
     onSurchargeChange: (String) -> Unit,
+    onIdempotencyIdChange: (String) -> Unit,
     onTransactionClick: (TransactionType, PromptForSignature) -> Unit,
 ) {
     val transactionStatus by viewModel.transactionStatus.observeAsState()
@@ -446,6 +452,13 @@ fun TransactionSection(
                 label = "Surcharge:",
                 value = surcharge,
                 onValueChange = onSurchargeChange,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+
+            LabeledTextField(
+                label = "Idempotency ID:",
+                value = idempotencyId,
+                onValueChange = onIdempotencyIdChange,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
 
@@ -705,6 +718,55 @@ private fun AmountField(
             keyboardOptions =
                 KeyboardOptions(
                     keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done,
+                ),
+        )
+    }
+}
+
+@Composable
+private fun LabeledTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholderValue: String = "Optional",
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(end = 8.dp),
+        )
+
+        TextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 42.dp)
+                    .border(1.dp, Color.Gray, RectangleShape),
+            singleLine = true,
+            placeholder = { Text(placeholderValue) },
+            colors =
+                TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    errorIndicatorColor = Color.Transparent,
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+                ),
+            keyboardOptions =
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Ascii,
                     imeAction = ImeAction.Done,
                 ),
         )
