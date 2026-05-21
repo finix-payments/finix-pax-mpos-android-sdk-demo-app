@@ -128,6 +128,7 @@ constructor(
         surcharge: String,
         transactionType: TransactionType,
         promptForSignature: PromptForSignature,
+        idempotencyId: String? = null,
     ) {
         appendLog("\nStart New Transaction\n")
         setLoading(true)
@@ -148,6 +149,7 @@ constructor(
                         surcharge = surchargeInCents,
                         tipAmount = tipInCents,
                         promptForSignature = promptForSignature,
+                        idempotencyId = idempotencyId,
                     )
                 }.onFailure {
                     appendLog("Transaction Error -> ${it.message}\n")
