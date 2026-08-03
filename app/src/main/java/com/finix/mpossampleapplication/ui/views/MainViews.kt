@@ -250,6 +250,7 @@ fun AppBar(
     onMenuExpandedChange: (Boolean) -> Unit,
 ) {
     var showResetConfirmation by remember { mutableStateOf(false) }
+    var showUnbindConfirmation by remember { mutableStateOf(false) }
 
     TopAppBar(
         title = {
@@ -269,7 +270,7 @@ fun AppBar(
                 onDismissRequest = { onMenuExpandedChange(false) },
             ) {
                 val menuItems =
-                    listOf("Configurations", "Reset Device", "Send Debug Data", "Others")
+                    listOf("Configurations", "Reset Device", "Unbind RKI", "Send Debug Data", "Others")
                 menuItems.forEach { menuItem ->
                     DropdownMenuItem(
                         onClick =
@@ -286,6 +287,10 @@ fun AppBar(
 
                                     "Reset Device" -> {
                                         showResetConfirmation = true
+                                    }
+
+                                    "Unbind RKI" -> {
+                                        showUnbindConfirmation = true
                                     }
 
                                     "Send Debug Data" -> viewModel.sendDebugData()
@@ -321,6 +326,29 @@ fun AppBar(
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showUnbindConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showUnbindConfirmation = false },
+            title = { Text("Unbind RKI?") },
+            text = { Text("This will unbind the connected device from the RKI servers so keys can be re-injected fresh on the next connection") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.unbindDevice()
+                        showUnbindConfirmation = false
+                    },
+                ) {
+                    Text("Unbind")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnbindConfirmation = false }) {
                     Text("Cancel")
                 }
             },

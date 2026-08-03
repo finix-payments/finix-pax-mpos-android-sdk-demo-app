@@ -238,6 +238,32 @@ constructor(
         }
     }
 
+    fun unbindDevice() {
+        viewModelScope.launch {
+            setLoading(true)
+            appendLog("Unbind RKI\n")
+
+            val success =
+                withContext(Dispatchers.IO) {
+                    mpos.unbindDeviceFromAllRKIServers(
+                        object : MPOSConnectionCallback {
+                            override fun onSuccess() {}
+
+                            override fun onError(errorMessage: String) {
+                                appendLog("Unbind RKI Error: $errorMessage\n")
+                            }
+
+                            override fun onProcessing(currentStepMessage: String) {
+                                appendLog("Unbinding: $currentStepMessage\n")
+                            }
+                        },
+                    )
+                }
+
+            appendLog(if (success) "Unbind RKI Complete\n" else "Unbind RKI Failed\n")
+        }.invokeOnCompletion { setLoading(false) }
+    }
+
     fun sendDebugData() {
         setLoading(true)
         appendLog("Sending debug data...\n")
