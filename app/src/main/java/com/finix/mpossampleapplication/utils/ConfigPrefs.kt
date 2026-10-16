@@ -23,7 +23,7 @@ class ConfigPrefs @Inject constructor() {
         private const val KEY_API_USERNAME = "username"
         private const val KEY_API_PASSWORD = "password"
         private const val KEY_SPLIT_MERCHANTS = "split_merchants"
-        private const val KEY_ENVIRONMENT = "environment"
+        private const val KEY_SELECTED_ENVIRONMENT = "selected_environment"
         private const val KEY_TAGS = "tags"
 
         const val D135 = "D135"
@@ -40,7 +40,6 @@ class ConfigPrefs @Inject constructor() {
             putString(key(KEY_MERCHANT_MID, data.env), data.mid)
             putString(key(KEY_API_USERNAME, data.env), data.userId)
             putString(key(KEY_API_PASSWORD, data.env), data.password)
-            putString(KEY_ENVIRONMENT, data.env.name)
             apply()
         }
     }
@@ -169,13 +168,15 @@ class ConfigPrefs @Inject constructor() {
         return prefs.getString(key(KEY_TAGS, env), "") ?: ""
     }
 
-    fun loadCurrentEnvironment(context: Context): EnvEnum {
+    fun saveCurrentEnvironment(context: Context, env: EnvEnum) {
         val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
-        val envName = prefs.getString(KEY_ENVIRONMENT, null)
-        return try {
-            EnvEnum.valueOf(envName ?: EnvEnum.PROD.name)
-        } catch (_: IllegalArgumentException) {
-            EnvEnum.PROD
-        }
+        prefs.edit { putString(KEY_SELECTED_ENVIRONMENT, env.name) }
+    }
+
+    // Returns null until the user explicitly picks an environment, so we never default to PROD
+    fun loadCurrentEnvironment(context: Context): EnvEnum? {
+        val prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+        val envName = prefs.getString(KEY_SELECTED_ENVIRONMENT, null) ?: return null
+        return runCatching { EnvEnum.valueOf(envName) }.getOrNull()
     }
 }

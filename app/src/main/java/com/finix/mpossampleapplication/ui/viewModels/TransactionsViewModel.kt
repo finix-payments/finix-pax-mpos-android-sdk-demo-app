@@ -20,6 +20,7 @@ import com.finix.mpos.sdk.MPOSEMVProcessingCallback
 import com.finix.mpos.sdk.MPOSFinix
 import com.finix.mpos.sdk.MPOSTransactionCallback
 import com.finix.mpossampleapplication.utils.ConfigPrefs
+import com.finix.mpossampleapplication.utils.ConfigValidator
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -79,6 +80,10 @@ constructor(
 
     val merchantData: StateFlow<MerchantData> = _merchantData.asStateFlow()
 
+    // False until the user saves a configuration, so we never connect (and inject RKI) against a default env
+    private val _isEnvironmentSelected = MutableStateFlow(false)
+    val isEnvironmentSelected: StateFlow<Boolean> = _isEnvironmentSelected.asStateFlow()
+
     private val _splitMerchants = MutableStateFlow<List<SplitTransfer>>(emptyList())
     var splitMerchants = _splitMerchants
 
@@ -98,18 +103,36 @@ constructor(
                 }
             }
 
-            val env = configPrefs.loadCurrentEnvironment(context)
-            _merchantData.value = loadConfigurations(env)
-            _splitMerchants.value = configPrefs.loadSplitMerchants(context, env)
-            _tags.value = configPrefs.loadTags(context, env)
+            configPrefs.loadCurrentEnvironment(context)?.let { env ->
+                _merchantData.value = loadConfigurations(env)
+                _splitMerchants.value = configPrefs.loadSplitMerchants(context, env)
+                _tags.value = configPrefs.loadTags(context, env)
+                _isEnvironmentSelected.value = true
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
     fun saveMerchantData(updatedMerchantData: MerchantData) {
-        _merchantData.value = updatedMerchantData
+        val previousEnv = _merchantData.value.env
+        val envChanged = !_isEnvironmentSelected.value || previousEnv != updatedMerchantData.env
+
+        // Keys are injected for the env active at connect time, so drop the connection on env change
+        if (envChanged && isConnected.value == true) {
+            appendLog("Environment changed, disconnecting device ${connectedDeviceName.value}\n")
+            disconnect()
+        }
+
         configPrefs.saveConfigurations(context, updatedMerchantData)
+        configPrefs.saveCurrentEnvironment(context, updatedMerchantData.env)
+        _merchantData.value = updatedMerchantData
+        _isEnvironmentSelected.value = true
+
+        if (envChanged) {
+            _splitMerchants.value = configPrefs.loadSplitMerchants(context, updatedMerchantData.env)
+            _tags.value = configPrefs.loadTags(context, updatedMerchantData.env)
+        }
     }
 
     fun saveSplitData(updatedSplit: List<SplitTransfer>) {
@@ -163,8 +186,19 @@ constructor(
         deviceName: String,
         deviceAddress: String,
     ) {
+        if (!_isEnvironmentSelected.value) {
+            appendLog("Select an environment in Configurations before connecting\n")
+            return
+        }
+
+        val validation = ConfigValidator.validateMerchantConfig(merchantData.value)
+        if (!validation.isValid) {
+            appendLog("Invalid ${merchantData.value.env.displayName} configuration: ${validation.errors.values.joinToString()}\n")
+            return
+        }
+
         setLoading(true)
-        appendLog("\nStart Connection to Device\n")
+        appendLog("\nStart Connection to Device (${merchantData.value.env.displayName})\n")
 
         if (mpos.isConnected()) {
             if (deviceName == connectedDeviceName.value) {
