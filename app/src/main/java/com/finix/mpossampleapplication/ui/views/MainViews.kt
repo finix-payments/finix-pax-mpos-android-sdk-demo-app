@@ -98,6 +98,7 @@ fun MainViews(
 
     val isSignatureSheetVisible by viewModel.isSignatureSheetVisible.collectAsStateWithLifecycle()
     val merchantData by viewModel.merchantData.collectAsStateWithLifecycle()
+    val isEnvironmentSelected by viewModel.isEnvironmentSelected.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -143,7 +144,10 @@ fun MainViews(
                     cardColor,
                     permissionsAccepted,
                     isConnected,
-                    onScanClick = { showBottomSheet = true },
+                    // Force an explicit env choice before the first connection triggers RKI injection
+                    onScanClick = {
+                        if (isEnvironmentSelected) showBottomSheet = true else configurationSheet = true
+                    },
                     onDisconnectClick = { showDisconnectDialog = true },
                 )
 
@@ -152,7 +156,7 @@ fun MainViews(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        "Selected environment: ${merchantData.env.displayName}",
+                        "Selected environment: ${if (isEnvironmentSelected) merchantData.env.displayName else "Not selected"}",
                         style =
                             TextStyle(
                                 fontStyle = FontStyle.Italic,
