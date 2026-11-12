@@ -1,5 +1,7 @@
 # Finix PAX MPOS Android SDK Demo App
 
+password: 5795ee35-862b-4c7e-ab07-083e2da06344
+
 ## Overview
 
 ### Documents for Java/Android developers
